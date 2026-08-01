@@ -1,0 +1,20 @@
+{
+  "agent_id": "schedule_email",
+  "panels": [
+    {
+      "id": "calendar",
+      "module": "calendar_schedule",
+      "x": 0, "y": 0, "w": 6, "h": 6
+    },
+    {
+      "id": "doc",
+      "module": "markdown_editor",
+      "x": 6, "y": 0, "w": 6, "h": 6
+    },
+    {
+      "id": "chat",
+      "module": "chat_view",
+      "x": 0, "y": 6, "w": 12, "h": 4
+    }
+  ]
+}

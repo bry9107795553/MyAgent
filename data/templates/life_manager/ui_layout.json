@@ -1,0 +1,25 @@
+{
+  "agent_id": "life_manager",
+  "panels": [
+    {
+      "id": "calendar",
+      "module": "calendar_schedule",
+      "x": 0, "y": 0, "w": 6, "h": 6
+    },
+    {
+      "id": "pomodoro",
+      "module": "timer_pomodoro",
+      "x": 6, "y": 0, "w": 3, "h": 6
+    },
+    {
+      "id": "bookmark",
+      "module": "bookmark_collection",
+      "x": 9, "y": 0, "w": 3, "h": 6
+    },
+    {
+      "id": "timeline",
+      "module": "timeline_browse",
+      "x": 0, "y": 6, "w": 12, "h": 4
+    }
+  ]
+}

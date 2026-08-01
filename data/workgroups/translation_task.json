@@ -1,0 +1,50 @@
+{
+  "id": "translation_task",
+  "name": "翻译工作组",
+  "description": "负责翻译、本地化等任务，参考术语库进行翻译，并通过术语一致性和语法校验确保翻译质量。",
+  "trigger_keywords": ["翻译", "translate", "中译英", "英译中", "本地化"],
+  "trigger_examples": [
+    "把这段中文翻译成英文",
+    "帮我把这份文档本地化为日语",
+    "translate this article to Chinese"
+  ],
+  "members": ["translator", "quality_checker"],
+  "pipeline": [
+    {
+      "step": 1,
+      "role": "translator",
+      "action": "参考术语库进行翻译，保持专业术语和语言风格一致",
+      "input_from": "user",
+      "output_to": "step2",
+      "parallel_with": [],
+      "condition": ""
+    },
+    {
+      "step": 2,
+      "role": "quality_checker",
+      "action": "校验翻译的术语一致性和语法正确性",
+      "input_from": "step1",
+      "output_to": "step3|user",
+      "parallel_with": [],
+      "condition": "校验通过则交付用户；不通过则进入step3修正"
+    },
+    {
+      "step": 3,
+      "role": "translator",
+      "action": "根据校验反馈修正翻译",
+      "input_from": "step2",
+      "output_to": "step2",
+      "parallel_with": [],
+      "condition": "修正次数<max_revisions时返回step2重新校验；达到上限则交付当前版本"
+    }
+  ],
+  "conditions": {
+    "max_revisions": 2,
+    "user_confirmation_points": ["翻译完成后交付前确认"],
+    "exit_criteria": "术语一致性校验和语法校验均通过，或修正次数达到上限"
+  },
+  "gpu_plan": {
+    "parallel_capable": false,
+    "note": "translator和quality_checker为文本处理任务，共享GPU0，无需并行"
+  }
+}
