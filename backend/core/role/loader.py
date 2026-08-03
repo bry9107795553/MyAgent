@@ -1,4 +1,4 @@
-﻿"""
+"""
 RoleLoader — 角色加载器
 
 职责:
@@ -676,7 +676,7 @@ class RoleLoader:
     def _load_definitions(self):
         """加载角色定义文件"""
         if ROLE_POOL_PATH.exists():
-            with open(ROLE_POOL_PATH, "r", encoding="utf-8") as f:
+            with open(ROLE_POOL_PATH, "r", encoding="utf-8-sig") as f:
                 self._role_pool_data = json.load(f)
             print(f"[RoleLoader] 已加载角色定义: {len(self._role_pool_data.get('roles', []))} 个角色")
         else:
