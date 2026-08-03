@@ -132,7 +132,8 @@ async function sendMessage() {
   streaming.value = true
   streamBuffer.value = ''
 
-  const ws = new WebSocket(`ws://${location.host}/api/agents/${currentAgent.value}/ws`)
+  const protocol = location.protocol === 'https:' ? 'wss' : 'ws'
+  const ws = new WebSocket(`${protocol}://${location.host}/api/agents/${currentAgent.value}/ws`)
   ws.onopen = () => {
     ws.send(JSON.stringify({ message: text }))
   }
