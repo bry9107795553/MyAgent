@@ -363,7 +363,14 @@ class RoleBase(ABC):
             gpu0: http://localhost:8000/v1 (14B 文本)
             gpu1: http://localhost:8001/v1 (7B 文本 + 视觉)
             gpu2: http://localhost:8002/v1 (7B 文本)
+
+        单 GPU 模式 (settings.single_gpu_mode=True):
+            所有角色共享 http://localhost:8000/v1
         """
+        from config.settings import settings
+        if settings.single_gpu_mode:
+            return "http://localhost:8000/v1"
+
         gpu_ports = {
             "gpu0": "http://localhost:8000/v1",
             "gpu1": "http://localhost:8001/v1",
