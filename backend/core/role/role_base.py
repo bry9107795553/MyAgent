@@ -29,6 +29,8 @@ from typing import Optional, AsyncGenerator
 
 from core.memory.working_memory import (
     Message, WorkingMemory, wm_registry,
+)
+from core.memory.compressor import (
     score_importance,
 )
 from core.memory.session_memory import (
