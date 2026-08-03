@@ -1,0 +1,20 @@
+{
+  "agent_id": "office_assistant",
+  "panels": [
+    {
+      "id": "kanban",
+      "module": "kanban_task",
+      "x": 0, "y": 0, "w": 8, "h": 6
+    },
+    {
+      "id": "calendar",
+      "module": "calendar_schedule",
+      "x": 8, "y": 0, "w": 4, "h": 6
+    },
+    {
+      "id": "doc",
+      "module": "markdown_editor",
+      "x": 0, "y": 6, "w": 12, "h": 4
+    }
+  ]
+}

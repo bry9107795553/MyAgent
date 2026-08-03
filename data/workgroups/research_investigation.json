@@ -1,0 +1,59 @@
+{
+  "id": "research_investigation",
+  "name": "调研工作组",
+  "description": "负责调研、对比、选型、竞品分析、市场分析、可行性研究等任务，通过多源搜索、洞察提炼、数据验证的流程输出可靠调研结论。",
+  "trigger_keywords": ["调研", "对比", "选型", "竞品分析", "市场分析", "可行性研究"],
+  "trigger_examples": [
+    "帮我做一份主流云服务商的竞品分析",
+    "对比一下这两款项目管理工具的优劣",
+    "做一次新产品的可行性研究"
+  ],
+  "members": ["knowledge_retriever", "creative", "quality_checker"],
+  "pipeline": [
+    {
+      "step": 1,
+      "role": "knowledge_retriever",
+      "action": "多源搜索调研对象的相关信息，可并行搜索多个维度（功能特性、价格、用户口碑、技术栈、市场份额等）",
+      "input_from": "user",
+      "output_to": "step2",
+      "parallel_with": [],
+      "condition": ""
+    },
+    {
+      "step": 2,
+      "role": "creative",
+      "action": "从多源信息中提炼洞察，生成对比分析结论和建议",
+      "input_from": "step1",
+      "output_to": "step3",
+      "parallel_with": [],
+      "condition": ""
+    },
+    {
+      "step": 3,
+      "role": "quality_checker",
+      "action": "验证数据来源准确性和结论逻辑一致性",
+      "input_from": "step2",
+      "output_to": "step4|user",
+      "parallel_with": [],
+      "condition": "验证通过则交付用户；不通过则进入step4补充"
+    },
+    {
+      "step": 4,
+      "role": "knowledge_retriever",
+      "action": "根据验证反馈补充缺失或存疑的数据来源",
+      "input_from": "step3",
+      "output_to": "step2",
+      "parallel_with": [],
+      "condition": "补充次数<max_revisions时返回step2重新提炼；达到上限则交付当前版本"
+    }
+  ],
+  "conditions": {
+    "max_revisions": 2,
+    "user_confirmation_points": ["调研维度确认", "结论交付前确认"],
+    "exit_criteria": "数据验证通过且结论逻辑一致，或补充次数达到上限"
+  },
+  "gpu_plan": {
+    "parallel_capable": true,
+    "note": "knowledge_retriever可并行搜索多个维度，建议分配至GPU0；creative和quality_checker共享GPU0"
+  }
+}

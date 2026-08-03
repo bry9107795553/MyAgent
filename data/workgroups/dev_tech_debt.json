@@ -1,0 +1,73 @@
+{
+  "id": "dev_tech_debt",
+  "name": "技术债处理工作组",
+  "description": "系统性扫描技术债并按优先级偿还，确保重构不改变原有行为",
+  "trigger_keywords": ["技术债", "还债", "重构", "清理代码", "优化代码结构"],
+  "trigger_examples": ["处理项目的技术债", "重构这个模块", "优化代码结构", "还技术债"],
+  "members": ["inspector", "developer", "tester", "cleaner"],
+  "pipeline": [
+    {
+      "step": 1,
+      "role": "inspector",
+      "action": "扫描全项目技术债：识别代码异味、重复代码、过时依赖、架构问题等",
+      "input_from": "user",
+      "output_to": "step_2",
+      "parallel_with": [],
+      "condition": ""
+    },
+    {
+      "step": 2,
+      "role": "inspector",
+      "action": "技术债分级：按紧急/高/中/低四个优先级分类，生成处理计划",
+      "input_from": "step_1",
+      "output_to": "step_3",
+      "parallel_with": [],
+      "condition": ""
+    },
+    {
+      "step": 3,
+      "role": "developer",
+      "action": "按优先级偿还技术债：从紧急到低优先级依次重构修复",
+      "input_from": "step_2",
+      "output_to": "step_4",
+      "parallel_with": [],
+      "condition": ""
+    },
+    {
+      "step": 4,
+      "role": "tester",
+      "action": "验证重构不改变原有行为：运行全部测试确保行为一致",
+      "input_from": "step_3",
+      "output_to": "step_5",
+      "parallel_with": [],
+      "condition": ""
+    },
+    {
+      "step": 5,
+      "role": "cleaner",
+      "action": "清理重构产生的废弃文件、旧代码残留",
+      "input_from": "step_4",
+      "output_to": "step_6",
+      "parallel_with": [],
+      "condition": ""
+    },
+    {
+      "step": 6,
+      "role": "inspector",
+      "action": "复查：确认技术债已有效偿还且无新增问题",
+      "input_from": "step_5",
+      "output_to": "user",
+      "parallel_with": [],
+      "condition": "复查不通过则返回 step_3 重新处理"
+    }
+  ],
+  "conditions": {
+    "max_revisions": 3,
+    "user_confirmation_points": ["技术债分级后可选确认处理范围"],
+    "exit_criteria": "所有技术债按优先级偿还完毕，测试验证行为未改变，inspector 复查通过"
+  },
+  "gpu_plan": {
+    "parallel_capable": false,
+    "note": "技术债处理为串行流程，按优先级依次处理，无需并行 GPU"
+  }
+}

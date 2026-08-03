@@ -1,0 +1,33 @@
+# ===== Web 框架 =====
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+websockets==12.0
+
+# ===== LLM 推理 =====
+openai==1.51.0          # llama.cpp 使用 OpenAI 兼容接口
+httpx==0.27.2           # 异步 HTTP 客户端
+
+# ===== 数据校验 =====
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# ===== 配置管理 =====
+pyyaml==6.0.2           # 读取 config.yaml
+
+# ===== 文件监听 (Agent 热加载) =====
+watchdog==5.0.3
+
+# ===== 工具依赖 =====
+aiofiles==24.1.0        # 异步文件操作
+json5==0.9.25           # 宽松 JSON 解析 (LLM 输出容错)
+
+# ===== 向量检索 (RAG) =====
+chromadb==0.5.5
+
+# ===== 图片处理 (皮肤色彩分析) =====
+Pillow==10.4.0
+scikit-learn==1.5.2     # KMeans 色彩聚类
+
+# ===== 开发工具 =====
+python-dotenv==1.0.1

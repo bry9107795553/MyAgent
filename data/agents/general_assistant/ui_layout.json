@@ -1,0 +1,10 @@
+{
+  "agent_id": "general_assistant",
+  "panels": [
+    {
+      "id": "chat",
+      "module": "chat_view",
+      "x": 0, "y": 0, "w": 12, "h": 10
+    }
+  ]
+}

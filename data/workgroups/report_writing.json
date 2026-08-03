@@ -1,0 +1,59 @@
+{
+  "id": "report_writing",
+  "name": "报告写作工作组",
+  "description": "负责各类报告、分析、总结、文档、方案的撰写，通过资料收集、初稿撰写、事实核查的闭环流程确保内容质量。",
+  "trigger_keywords": ["写报告", "写分析", "写总结", "写文档", "写方案", "出报告"],
+  "trigger_examples": [
+    "帮我写一份关于新能源行业的市场分析报告",
+    "请写一份项目季度总结文档",
+    "出一份产品选型方案"
+  ],
+  "members": ["knowledge_retriever", "writer", "quality_checker"],
+  "pipeline": [
+    {
+      "step": 1,
+      "role": "knowledge_retriever",
+      "action": "根据报告主题收集相关资料，可同时并行搜索多个子主题（行业数据、案例、政策法规、竞品信息等）",
+      "input_from": "user",
+      "output_to": "step2",
+      "parallel_with": [],
+      "condition": ""
+    },
+    {
+      "step": 2,
+      "role": "writer",
+      "action": "基于收集的资料撰写报告初稿",
+      "input_from": "step1",
+      "output_to": "step3",
+      "parallel_with": [],
+      "condition": ""
+    },
+    {
+      "step": 3,
+      "role": "quality_checker",
+      "action": "对初稿进行事实核查，验证数据准确性和论据可靠性",
+      "input_from": "step2",
+      "output_to": "step4|user",
+      "parallel_with": [],
+      "condition": "核查通过则交付用户；不通过则进入step4修改"
+    },
+    {
+      "step": 4,
+      "role": "writer",
+      "action": "根据质检反馈修改报告",
+      "input_from": "step3",
+      "output_to": "step3",
+      "parallel_with": [],
+      "condition": "修改次数<max_revisions时返回step3重新核查；达到上限则交付当前版本"
+    }
+  ],
+  "conditions": {
+    "max_revisions": 3,
+    "user_confirmation_points": ["初稿完成后可选确认", "质检通过后交付前确认"],
+    "exit_criteria": "质检通过且无事实错误，或修改次数达到上限"
+  },
+  "gpu_plan": {
+    "parallel_capable": true,
+    "note": "knowledge_retriever可并行搜索多个子主题，建议分配至GPU0；writer和quality_checker为文本生成与校验，共享GPU0"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "dark_purple",
+  "name": "深紫科技",
+  "version": "1.0.0",
+  "description": "默认深色主题，紫色强调，科技感十足",
+  "tags": ["深色", "科技", "默认"],
+  "preview_colors": ["#0f0f1a", "#1a1a2e", "#6c5ce7", "#00cec9"],
+  "variables": {
+    "--bg-0": "#0f0f1a",
+    "--bg-1": "#1a1a2e",
+    "--bg-2": "#16213e",
+    "--border": "rgba(255,255,255,0.08)",
+    "--text-0": "#e8e8f0",
+    "--text-1": "#c8d8e8",
+    "--text-2": "#8aa8c8",
+    "--accent": "#6c5ce7",
+    "--accent-2": "#00cec9",
+    "--success": "#00b894",
+    "--warning": "#fdcb6e",
+    "--error": "#e8463a",
+    "--radius": "12px"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "agent_id": "industry_service",
+  "panels": [
+    {
+      "id": "chat",
+      "module": "chat_view",
+      "x": 0, "y": 0, "w": 8, "h": 8
+    },
+    {
+      "id": "dashboard",
+      "module": "data_dashboard",
+      "x": 8, "y": 0, "w": 4, "h": 8
+    },
+    {
+      "id": "files",
+      "module": "file_browser",
+      "x": 0, "y": 8, "w": 12, "h": 2
+    }
+  ]
+}

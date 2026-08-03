@@ -1,0 +1,23 @@
+{
+  "id": "ocean_blue",
+  "name": "海洋深蓝",
+  "version": "1.0.0",
+  "description": "深邃海洋蓝调，宁静专注，适合深度工作",
+  "tags": ["深色", "海洋", "专注"],
+  "preview_colors": ["#0a1628", "#0f2035", "#1a3a5c", "#4fc3f7"],
+  "variables": {
+    "--bg-0": "#0a1628",
+    "--bg-1": "#0f2035",
+    "--bg-2": "#1a2d45",
+    "--border": "rgba(79,195,247,0.12)",
+    "--text-0": "#e8f0fe",
+    "--text-1": "#c8d8e8",
+    "--text-2": "#8aa8c8",
+    "--accent": "#4fc3f7",
+    "--accent-2": "#29b6f6",
+    "--success": "#66bb6a",
+    "--warning": "#ffa726",
+    "--error": "#ef5350",
+    "--radius": "10px"
+  }
+}
