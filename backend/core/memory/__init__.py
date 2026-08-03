@@ -21,7 +21,6 @@ from core.memory.store import (
 from core.memory.working_memory import (
     Message, SummaryL1, SummaryL2,
     WorkingMemory, WorkingMemoryRegistry, wm_registry,
-    score_importance,
 )
 from core.memory.archive import (
     Archive, ArchiveRegistry, archive_registry,
