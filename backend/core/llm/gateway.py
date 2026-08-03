@@ -4,17 +4,17 @@ LLM 网关 — 统一推理接口
 - 支持流式输出
 - 支持工具调用 (function calling)
 - 支持多 GPU 路由 (base_url_override)
-- 支持模型切换 (本地/云端动态切换)
 - 隐私标签路由 (local_only / cloud_allowed)
+- 云端 API 降级: 本地 llama.cpp 不可用时自动切换智谱云 API
 """
 from openai import AsyncOpenAI
 from typing import AsyncGenerator, Optional
 import json
-import os
 import httpx
 import asyncio
+import os
 
-from config.settings import settings, load_models_config
+from config.settings import settings
 
 
 class LLMGateway:
@@ -25,151 +25,116 @@ class LLMGateway:
 
     def __init__(self):
         self._client: Optional[AsyncOpenAI] = None
+        self._cloud_client: Optional[AsyncOpenAI] = None
         self._available: bool = False
-        self._profiles: dict[str, dict] = {}
-        self._current_profile_id: str = ""
-
-    # ------------------------------------------------------------------ #
-    # 模型配置管理
-    # ------------------------------------------------------------------ #
-
-    def load_profiles(self):
-        """从 models.yaml 加载模型配置"""
-        config = load_models_config()
-        profiles = config.get("profiles", [])
-        self._profiles = {}
-        for p in profiles:
-            pid = p["id"]
-            # 解析环境变量占位符 (如 ${ZHIPU_API_KEY})
-            resolved = dict(p)
-            api_key = p.get("api_key", "EMPTY")
-            if api_key.startswith("${") and api_key.endswith("}"):
-                env_var = api_key[2:-1]
-                resolved["api_key"] = os.environ.get(env_var, "EMPTY")
-            self._profiles[pid] = resolved
-
-        # 默认选中第一个 profile
-        if self._profiles and not self._current_profile_id:
-            self._current_profile_id = list(self._profiles.keys())[0]
-
-        print(f"[LLM Gateway] 已加载 {len(self._profiles)} 个模型配置: {list(self._profiles.keys())}")
-        print(f"[LLM Gateway] 当前模型: {self._current_profile_id}")
-
-    def switch_model(self, profile_id: str) -> bool:
-        """
-        切换当前使用的模型
-
-        :param profile_id: 模型配置 ID (如 local-qwen2.5-14b, cloud-zhipu)
-        :return: 是否切换成功
-        """
-        if profile_id not in self._profiles:
-            return False
-        self._current_profile_id = profile_id
-        print(f"[LLM Gateway] 已切换模型 → {profile_id}")
-        return True
-
-    def get_current_model(self) -> dict:
-        """获取当前模型信息"""
-        if not self._current_profile_id or self._current_profile_id not in self._profiles:
-            return {"id": "unknown", "name": "未知", "provider": "unknown", "privacy_tag": "unknown"}
-        p = self._profiles[self._current_profile_id]
-        return {
-            "id": self._current_profile_id,
-            "name": p.get("model_name", "unknown"),
-            "provider": p.get("provider", "unknown"),
-            "privacy_tag": p.get("privacy_tag", "unknown"),
-        }
-
-    def list_models(self) -> list[dict]:
-        """列出所有可用模型"""
-        result = []
-        for pid, p in self._profiles.items():
-            result.append({
-                "id": pid,
-                "name": p.get("model_name", "unknown"),
-                "provider": p.get("provider", "unknown"),
-                "capabilities": p.get("capabilities", []),
-                "privacy_tag": p.get("privacy_tag", "unknown"),
-                "is_active": pid == self._current_profile_id,
-            })
-        return result
-
-    def _get_active_profile(self) -> dict:
-        """获取当前激活的模型配置"""
-        if self._current_profile_id and self._current_profile_id in self._profiles:
-            return self._profiles[self._current_profile_id]
-        # 回退到 settings 默认值
-        return {
-            "base_url": settings.llama_base_url,
-            "model_name": settings.llama_model,
-            "api_key": settings.llama_api_key,
-            "default_temperature": settings.default_temperature,
-            "default_max_tokens": settings.default_max_tokens,
-        }
-
-    # ------------------------------------------------------------------ #
-    # 初始化
-    # ------------------------------------------------------------------ #
+        self._mode: str = "local"         # "local" | "cloud" | "none"
+        self._cloud_available: bool = False
 
     async def init(self):
-        """初始化 llama.cpp 客户端，检测连接（带重试，应对模型加载延迟）"""
-        # 先加载模型配置
-        self.load_profiles()
-
-        # 用当前 profile 的 base_url 初始化客户端
-        profile = self._get_active_profile()
-        base_url = profile.get("base_url", settings.llama_base_url)
-        api_key = profile.get("api_key", settings.llama_api_key)
-
+        """初始化 LLM 客户端，优先本地 llama.cpp，不可用时降级到云端 API"""
+        # 1. 尝试连接本地 llama.cpp
         self._client = AsyncOpenAI(
-            base_url=base_url,
-            api_key=api_key,
+            base_url=settings.llama_base_url,
+            api_key=settings.llama_api_key,
             timeout=httpx.Timeout(settings.llama_timeout, connect=10.0),
         )
-        # 重试连接（模型加载可能需要几秒到几十秒）
-        max_retries = 6
+
+        max_retries = 3  # 减少重试次数，加快降级
+        local_ok = False
         for attempt in range(1, max_retries + 1):
             try:
                 models = await self._client.models.list()
                 self._available = True
-                print(f"[LLM Gateway] {base_url} 已连接，可用模型: {[m.id for m in models.data]}")
-                return
+                self._mode = "local"
+                local_ok = True
+                print(f"[LLM Gateway] llama.cpp 已连接，可用模型: {[m.id for m in models.data]}")
+                break
             except Exception as e:
-                print(f"[LLM Gateway] 连接尝试 {attempt}/{max_retries} 失败: {e}")
+                print(f"[LLM Gateway] 本地连接尝试 {attempt}/{max_retries} 失败: {e}")
                 if attempt < max_retries:
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(3)
+
+        if local_ok:
+            return
+
+        # 2. 本地不可用，尝试云端 API 降级
         self._available = False
-        print("[LLM Gateway] ⚠ llama.cpp 连接失败，推理功能暂不可用")
-        print("[LLM Gateway]   服务将在模型就绪后自动恢复")
+        print("[LLM Gateway] ⚠ 本地 llama.cpp 不可用，尝试云端 API 降级...")
+
+        if not settings.cloud_api_enabled:
+            print("[LLM Gateway] ⚠ 云端 API 降级未启用，推理功能暂不可用")
+            self._mode = "none"
+            return
+
+        cloud_key = settings.cloud_api_key or os.environ.get("ZHIPU_API_KEY", "")
+        if not cloud_key:
+            print("[LLM Gateway] ⚠ 未配置 ZHIPU_API_KEY 环境变量，云端 API 不可用")
+            print("[LLM Gateway]   请设置环境变量: set ZHIPU_API_KEY=你的密钥")
+            self._mode = "none"
+            return
+
+        self._cloud_client = AsyncOpenAI(
+            base_url=settings.cloud_api_base_url,
+            api_key=cloud_key,
+            timeout=httpx.Timeout(settings.llama_timeout, connect=10.0),
+        )
+
+        try:
+            # 测试云端连接
+            test_response = await self._cloud_client.chat.completions.create(
+                model=settings.cloud_api_model,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=5,
+            )
+            self._cloud_available = True
+            self._available = True
+            self._mode = "cloud"
+            print(f"[LLM Gateway] ✓ 云端 API 降级成功，使用模型: {settings.cloud_api_model}")
+            print(f"[LLM Gateway]   模式: 云端 API (智谱)")
+        except Exception as e:
+            print(f"[LLM Gateway] ✗ 云端 API 连接失败: {e}")
+            self._mode = "none"
+            print("[LLM Gateway]   推理功能暂不可用，请检查网络或 API Key")
 
     def _get_client(self, base_url: str = "") -> AsyncOpenAI:
         """
-        获取客户端实例 (支持多 GPU 路由和模型切换)
+        获取客户端实例 (支持多 GPU 路由 + 云端降级)
 
-        :param base_url: LLM 服务 URL，为空则使用当前 profile 的 URL
+        :param base_url: LLM 服务 URL，为空则使用当前模式对应的客户端
         :return: AsyncOpenAI 客户端
         """
-        if not base_url:
-            # 使用当前 profile 的 base_url
-            profile = self._get_active_profile()
-            base_url = profile.get("base_url", settings.llama_base_url)
-            api_key = profile.get("api_key", settings.llama_api_key)
-        else:
-            api_key = settings.llama_api_key
+        if base_url:
+            # 缓存多 GPU 客户端
+            if base_url not in self._clients:
+                self._clients[base_url] = AsyncOpenAI(
+                    base_url=base_url,
+                    api_key=settings.llama_api_key,
+                    timeout=httpx.Timeout(settings.llama_timeout, connect=10.0),
+                )
+                print(f"[LLM Gateway] 新建 GPU 客户端: {base_url}")
+            return self._clients[base_url]
 
-        # 缓存多客户端
-        if base_url not in self._clients:
-            self._clients[base_url] = AsyncOpenAI(
-                base_url=base_url,
-                api_key=api_key,
-                timeout=httpx.Timeout(settings.llama_timeout, connect=10.0),
-            )
-            print(f"[LLM Gateway] 新建客户端: {base_url}")
-        return self._clients[base_url]
+        # 无指定 base_url，使用当前模式
+        if self._mode == "cloud":
+            return self._cloud_client
+        return self._client
+
+    def _get_model_name(self, base_url: str = "") -> str:
+        """获取当前使用的模型名称"""
+        if base_url:
+            return settings.llama_model
+        if self._mode == "cloud":
+            return settings.cloud_api_model
+        return settings.llama_model
 
     @property
     def available(self) -> bool:
         return self._available
+
+    @property
+    def mode(self) -> str:
+        """返回当前模式: 'local' | 'cloud' | 'none'"""
+        return self._mode
 
     async def chat(
         self,
@@ -184,21 +149,20 @@ class LLMGateway:
         非流式对话
 
         :param messages: OpenAI 消息格式 [{"role": "system", "content": "..."}, ...]
-        :param agent_config: Agent 配置 (可覆盖默认参数)
+        :param agent_config: Agent 配置 (可覆盖默认参数，已废弃 model 字段)
         :param temperature: 采样温度
         :param max_tokens: 最大生成 token 数
         :param tools: 工具定义 (function calling)
         :param base_url: 多 GPU 路由: 指定 LLM 服务 URL
         :return: {"content": str, "tool_calls": list}
         """
-        profile = self._get_active_profile()
         client = self._get_client(base_url)
         if not client:
             raise RuntimeError("LLM Gateway 未初始化，请先调用 init()")
 
-        temp = temperature or profile.get("default_temperature", settings.default_temperature)
-        max_tok = max_tokens or profile.get("default_max_tokens", settings.default_max_tokens)
-        model_name = profile.get("model_name", settings.llama_model)
+        temp = temperature or settings.default_temperature
+        max_tok = max_tokens or settings.default_max_tokens
+        model_name = self._get_model_name(base_url)
 
         response = await client.chat.completions.create(
             model=model_name,
@@ -238,20 +202,19 @@ class LLMGateway:
         流式对话 — 逐 token 生成
 
         :param messages: OpenAI 消息格式
-        :param agent_config: Agent 配置
+        :param agent_config: Agent 配置 (已废弃 model 字段)
         :param temperature: 采样温度
         :param max_tokens: 最大生成 token 数
         :param base_url: 多 GPU 路由: 指定 LLM 服务 URL
         :yield: 每次返回一个 token (str)
         """
-        profile = self._get_active_profile()
         client = self._get_client(base_url)
         if not client:
             raise RuntimeError("LLM Gateway 未初始化，请先调用 init()")
 
-        temp = temperature or profile.get("default_temperature", settings.default_temperature)
-        max_tok = max_tokens or profile.get("default_max_tokens", settings.default_max_tokens)
-        model_name = profile.get("model_name", settings.llama_model)
+        temp = temperature or settings.default_temperature
+        max_tok = max_tokens or settings.default_max_tokens
+        model_name = self._get_model_name(base_url)
 
         stream = await client.chat.completions.create(
             model=model_name,

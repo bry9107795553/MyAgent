@@ -1,7 +1,7 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "updated": "2026-08-01",
-  "description": "角色池定义：15个角色的能力标签、GPU亲和性、模型需求、工具依赖",
+  "description": "角色池定义：16个角色的能力标签、GPU亲和性、模型需求、工具依赖",
   "roles": [
     {
       "id": "master",
@@ -162,14 +162,24 @@
       "capabilities": ["role_audit", "prompt_optimization", "role_add_remove", "conversation_export", "performance_analysis"],
       "tools": ["role_editor", "conversation_exporter", "prompt_validator", "diff_viewer"],
       "description": "角色元数据管理，审计/提示词优化/角色增删/对话导出/表现分析"
+    },
+    {
+      "id": "handoff_receiver",
+      "name": "项目接手员",
+      "group": "dev",
+      "model": "text",
+      "gpu_affinity": "gpu0",
+      "capabilities": ["code_reading", "impact_assessment", "scope_confirmation", "modification_dispatch", "backlog_tracking"],
+      "tools": ["dispatch_tools", "inspector_scan", "debt_tracker", "backlog_manager"],
+      "description": "项目接手员，只接已有项目。读代码/评估影响面/精准派单修改，与教练平行调度5人团队"
     }
   ],
   "gpu_allocation": {
     "gpu0": {
       "model": "Qwen2.5-14B",
       "port": 8000,
-      "description": "重活：教练/写作/创意/设计师/开发",
-      "roles": ["master", "coach", "writer", "creative", "designer", "developer"]
+      "description": "重活：教练/写作/创意/设计师/开发/接手员",
+      "roles": ["master", "coach", "writer", "creative", "designer", "developer", "handoff_receiver"]
     },
     "gpu1": {
       "model": "Qwen2.5-7B",

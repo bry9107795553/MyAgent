@@ -36,6 +36,7 @@ from core.role.role_base import RoleBase, RoleContext, PROMPT_SECTIONS
 from core.memory.blackboard import blackboard, BlackboardEntry
 from core.memory.store import generate_id, now_iso
 from core.project.project_status import project_status
+from core.agent.orchestrator import secretary, Secretary
 
 
 # ===== 调度器配置路径 =====
@@ -73,11 +74,16 @@ class MasterRole(RoleBase):
     # ------------------------------------------------------------------ #
 
     def init(self, session_id: str = ""):
-        """初始化主控 (加载调度器配置 + 角色池 + 工作组)"""
+        """初始化主控 (加载调度器配置 + 角色池 + 工作组 + 秘书)"""
         super().init(session_id)
         self._load_dispatcher_config()
         self._load_role_pool()
         self._load_workgroups()
+
+        # 初始化秘书 (上下文管理员)
+        secretary.init(session_id, llm_call=self._call_llm_raw)
+        print(f"[Master] 秘书已初始化 | 会话: {session_id}")
+
         return self
 
     def register_role(self, role: RoleBase):
@@ -189,6 +195,8 @@ class MasterRole(RoleBase):
             4. 工作组未命中 → 关键词匹配角色 → 并行分发
             5. 都未匹配 → 主控自己处理
 
+        每轮调度后更新秘书的运行时状态。
+
         :param user_message: 用户消息
         :return: {"type": "direct"|"workgroup"|"dispatched",
                   "content": str, "roles_used": [...], "workgroup": str|None}
@@ -196,44 +204,61 @@ class MasterRole(RoleBase):
         # 0. 注入项目上下文 (开发相关消息时自动附加上一个活跃项目状态)
         enhanced_message = self.inject_project_context(user_message)
 
+        result: dict = {}
+
         # 1. 简单问候/闲聊 → 直接回复
         if self._is_simple_greeting(user_message):
-            return {
+            result = {
                 "type": "direct",
                 "content": await self._handle_greeting(user_message),
                 "roles_used": [],
                 "workgroup": None,
             }
+        else:
+            # 2. 尝试匹配预设工作组
+            matched_wg = self._match_workgroup(enhanced_message)
+            if matched_wg:
+                result = {
+                    "type": "workgroup",
+                    "content": await self._execute_pipeline(matched_wg, enhanced_message),
+                    "roles_used": matched_wg.get("members", []),
+                    "workgroup": matched_wg.get("id"),
+                }
+            else:
+                # 3. 工作组未命中 → 关键词匹配角色
+                matched_roles = self._keyword_match_roles(enhanced_message)
+                if matched_roles:
+                    results = await self._dispatch_to_roles(enhanced_message, matched_roles)
+                    content = self._aggregate_results(enhanced_message, results)
+                    result = {
+                        "type": "dispatched",
+                        "content": content,
+                        "roles_used": [r["id"] for r in matched_roles],
+                        "workgroup": None,
+                    }
+                else:
+                    # 4. 都未匹配 → 主控自己处理
+                    result = {
+                        "type": "direct",
+                        "content": await self._handle_general(enhanced_message),
+                        "roles_used": [],
+                        "workgroup": None,
+                    }
 
-        # 2. 尝试匹配预设工作组
-        matched_wg = self._match_workgroup(enhanced_message)
-        if matched_wg:
-            return {
-                "type": "workgroup",
-                "content": await self._execute_pipeline(matched_wg, enhanced_message),
-                "roles_used": matched_wg.get("members", []),
-                "workgroup": matched_wg.get("id"),
-            }
+        # 5. 秘书记录本轮对话
+        secretary.record_turn(
+            user_message=user_message,
+            role_response=result.get("content", ""),
+            role_id=result.get("workgroup") or (
+                result.get("roles_used", [None])[0] or "master"
+            ),
+        )
 
-        # 3. 工作组未命中 → 关键词匹配角色
-        matched_roles = self._keyword_match_roles(enhanced_message)
-        if matched_roles:
-            results = await self._dispatch_to_roles(enhanced_message, matched_roles)
-            content = self._aggregate_results(enhanced_message, results)
-            return {
-                "type": "dispatched",
-                "content": content,
-                "roles_used": [r["id"] for r in matched_roles],
-                "workgroup": None,
-            }
+        # 6. 检查是否需要增量摘要 (异步，不阻塞)
+        if secretary.should_summarize():
+            asyncio.create_task(secretary.generate_summary())
 
-        # 4. 都未匹配 → 主控自己处理
-        return {
-            "type": "direct",
-            "content": await self._handle_general(enhanced_message),
-            "roles_used": [],
-            "workgroup": None,
-        }
+        return result
 
     async def dispatch_stream(self, user_message: str) -> AsyncGenerator[str, None]:
         """
@@ -293,6 +318,24 @@ class MasterRole(RoleBase):
         """处理通用对话 (未匹配到角色，主控自己 LLM 处理)"""
         ctx = self._assemble_context(message, generate_id("task"), "")
         return await self._call_llm(ctx)
+
+    async def _call_llm_raw(self, messages: list[dict], **kwargs) -> dict:
+        """
+        原始 LLM 调用 (供秘书使用)
+
+        :param messages: LLM 消息列表
+        :param kwargs: 额外参数 (max_tokens, temperature 等)
+        :return: {"content": str, ...}
+        """
+        from core.llm.gateway import llm_gateway
+
+        result = await llm_gateway.chat(
+            messages,
+            temperature=kwargs.get("temperature", 0.7),
+            max_tokens=kwargs.get("max_tokens", 4096),
+            base_url=self._get_gpu_url(),
+        )
+        return result
 
     # ------------------------------------------------------------------ #
     # 角色匹配 (三步策略)

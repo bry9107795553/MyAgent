@@ -1,0 +1,59 @@
+{
+  "id": "schedule_planning",
+  "name": "日程规划工作组",
+  "description": "负责日程安排、时间规划、提醒、排期等任务，通过扫描已有安排、优化排期建议、冲突检测的流程输出无冲突的日程方案。",
+  "trigger_keywords": ["安排日程", "规划时间", "提醒", "日程安排", "时间管理", "排期"],
+  "trigger_examples": [
+    "帮我安排下周的日程",
+    "规划一下本周的项目排期",
+    "提醒我明天下午开会"
+  ],
+  "members": ["scheduler", "creative", "quality_checker"],
+  "pipeline": [
+    {
+      "step": 1,
+      "role": "scheduler",
+      "action": "扫描用户已有日程安排和空闲时段",
+      "input_from": "user",
+      "output_to": "step2",
+      "parallel_with": [],
+      "condition": ""
+    },
+    {
+      "step": 2,
+      "role": "creative",
+      "action": "基于已有安排生成优化排期建议，考虑任务优先级和时间效率",
+      "input_from": "step1",
+      "output_to": "step3",
+      "parallel_with": [],
+      "condition": ""
+    },
+    {
+      "step": 3,
+      "role": "quality_checker",
+      "action": "检测排期方案中是否存在时间冲突或不合理安排",
+      "input_from": "step2",
+      "output_to": "step4|user",
+      "parallel_with": [],
+      "condition": "无冲突则交付用户；有冲突则进入step4调整"
+    },
+    {
+      "step": 4,
+      "role": "scheduler",
+      "action": "根据冲突检测结果调整日程安排",
+      "input_from": "step3",
+      "output_to": "step3",
+      "parallel_with": [],
+      "condition": "调整次数<max_revisions时返回step3重新检测；达到上限则交付当前最优方案"
+    }
+  ],
+  "conditions": {
+    "max_revisions": 3,
+    "user_confirmation_points": ["排期方案确认", "最终日程交付前确认"],
+    "exit_criteria": "冲突检测通过且无时间冲突，或调整次数达到上限"
+  },
+  "gpu_plan": {
+    "parallel_capable": false,
+    "note": "scheduler、creative和quality_checker为轻量文本与逻辑处理任务，共享GPU0，无需并行"
+  }
+}
