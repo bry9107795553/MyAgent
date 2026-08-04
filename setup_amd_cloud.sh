@@ -478,7 +478,24 @@ fi
 step "8/9" "配置 Nginx"
 
 if command -v nginx &> /dev/null; then
-    FRONTEND_DIST="$PROJECT_DIR/frontend/dist"
+    SUDO=$(command -v sudo >/dev/null 2>&1 && echo sudo || echo "")
+
+    # nginx worker 以 www-data 身份运行，无法穿越 /root (mode 700)，
+    # 直接把 root 指向 ~/myagent/frontend/dist 会得到 403 / 500。
+    # 因此统一把构建产物发布到 /var/www/myagent。
+    FRONTEND_DIST="/var/www/myagent"
+    $SUDO mkdir -p "$FRONTEND_DIST"
+    if [ -d "$PROJECT_DIR/frontend/dist" ] && [ -f "$PROJECT_DIR/frontend/dist/index.html" ]; then
+        $SUDO cp -r "$PROJECT_DIR/frontend/dist/." "$FRONTEND_DIST/"
+        $SUDO chmod -R a+rX "$FRONTEND_DIST"
+        echo "  ✓ 前端产物已发布到 $FRONTEND_DIST"
+    else
+        warn "未找到 frontend/dist/index.html，nginx 仅提供 API 反代"
+        echo '<h1>MyAgent</h1><p>Frontend build missing. API is available at /api/</p>' \
+            | $SUDO tee "$FRONTEND_DIST/index.html" > /dev/null
+        $SUDO chmod -R a+rX "$FRONTEND_DIST"
+    fi
+
     sed "s|__FRONTEND_DIST__|${FRONTEND_DIST}|g" "$PROJECT_DIR/nginx.conf" > /tmp/nginx_myagent.conf
     sudo cp /tmp/nginx_myagent.conf /etc/nginx/nginx.conf
     rm -f /tmp/nginx_myagent.conf

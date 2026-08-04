@@ -162,6 +162,17 @@ else
     SUDO="sudo"
 fi
 
+# 同步前端产物到 /var/www/myagent。
+# nginx worker 以 www-data 运行，无法穿越 /root (mode 700)，
+# 直接把 root 指向仓库内的 frontend/dist 会得到 403/500。
+WEB_ROOT="/var/www/myagent"
+if [ -f "$PROJECT_DIR/frontend/dist/index.html" ]; then
+    $SUDO mkdir -p "$WEB_ROOT"
+    $SUDO cp -r "$PROJECT_DIR/frontend/dist/." "$WEB_ROOT/" 2>/dev/null || true
+    $SUDO chmod -R a+rX "$WEB_ROOT" 2>/dev/null || true
+    echo -e "  ${GREEN}✓${NC} 前端产物已同步 → $WEB_ROOT"
+fi
+
 if ! command -v nginx >/dev/null 2>&1; then
     echo -e "  ${YELLOW}⚠${NC} 未安装 nginx，跳过（端口 80 前端不可用）"
     echo -e "  ${YELLOW}⚠${NC} 后端仍可直连: http://<实例IP>:8080/docs"
