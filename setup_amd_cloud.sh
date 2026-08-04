@@ -243,42 +243,85 @@ sudo apt-get install -y -qq \
 echo "  ✓ 编译工具已安装"
 
 # ============================================================
-# Step 4: 编译 llama.cpp (ROCm / gfx1100)
+# Step 4: 获取 llama.cpp (优先官方 ROCm 预编译包，回退源码编译)
 # ============================================================
-step "4/9" "编译 llama.cpp (ROCm 后端, $AMDGPU_TARGET)"
+step "4/9" "获取 llama.cpp (ROCm 后端, $AMDGPU_TARGET)"
+
+# 官方自 b10xxx 起提供 Ubuntu ROCm 7.2 预编译二进制（~124MB）。
+# 直接下载解压 <1 分钟，相比源码编译（10-15 分钟）大幅节省实例机时。
+# 若下载失败（网络受限等），自动回退到源码编译路径。
+LLAMA_PREBUILT_TAG="${LLAMA_PREBUILT_TAG:-b10267}"
+LLAMA_PREBUILT_URL="https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_PREBUILT_TAG}/llama-${LLAMA_PREBUILT_TAG}-bin-ubuntu-rocm-7.2-x64.tar.gz"
 
 if [ -f "$LLAMA_CPP_DIR/build/bin/llama-server" ]; then
-    echo "  ✓ llama-server 已存在，跳过编译"
-    echo "    (如需重编译: rm -rf $LLAMA_CPP_DIR/build)"
+    echo "  ✓ llama-server 已存在，跳过获取"
+    echo "    (如需重新获取: rm -rf $LLAMA_CPP_DIR/build)"
 else
-    if [ ! -d "$LLAMA_CPP_DIR" ]; then
-        git clone --depth 1 https://github.com/ggerganov/llama.cpp.git "$LLAMA_CPP_DIR"
+    mkdir -p "$LLAMA_CPP_DIR"
+    PREBUILT_OK=0
+
+    echo "  → 尝试下载官方 ROCm 预编译包 ($LLAMA_PREBUILT_TAG, ~124MB)..."
+    tmp_tar="/tmp/llama-rocm-${LLAMA_PREBUILT_TAG}.tar.gz"
+    if curl -fL --retry 3 --connect-timeout 20 -o "$tmp_tar" "$LLAMA_PREBUILT_URL" 2>&1 | tail -2; then
+        # 校验体积合理（>50MB）后再解压，避免把错误页当成包
+        tar_size=$(stat -c%s "$tmp_tar" 2>/dev/null || echo 0)
+        if [ "$tar_size" -gt 52428800 ]; then
+            mkdir -p "$LLAMA_CPP_DIR/build"
+            tar -xzf "$tmp_tar" -C "$LLAMA_CPP_DIR/build" --strip-components=1 2>/dev/null \
+                || tar -xzf "$tmp_tar" -C "$LLAMA_CPP_DIR/build"
+            # 官方包结构可能是 build/bin/ 或直接 bin/，两种都兜住
+            if [ ! -f "$LLAMA_CPP_DIR/build/bin/llama-server" ]; then
+                found=$(find "$LLAMA_CPP_DIR/build" -name llama-server -type f 2>/dev/null | head -1)
+                if [ -n "$found" ]; then
+                    mkdir -p "$LLAMA_CPP_DIR/build/bin"
+                    cp -a "$(dirname "$found")"/* "$LLAMA_CPP_DIR/build/bin/" 2>/dev/null || true
+                fi
+            fi
+            chmod +x "$LLAMA_CPP_DIR/build/bin/"* 2>/dev/null || true
+            if [ -f "$LLAMA_CPP_DIR/build/bin/llama-server" ]; then
+                PREBUILT_OK=1
+                echo "  ✓ 预编译包就绪（跳过编译，节省约 15 分钟）"
+            fi
+        else
+            warn "下载体积异常 (${tar_size} bytes)，判定失败"
+        fi
+        rm -f "$tmp_tar"
+    else
+        warn "预编译包下载失败"
     fi
 
-    cd "$LLAMA_CPP_DIR"
-    git fetch --tags --depth 1 2>/dev/null || true
-    latest_tag=$(git tag -l 'b*' --sort=-v:refname | head -1)
-    if [ -n "$latest_tag" ]; then
-        git checkout "$latest_tag" 2>/dev/null && echo "  ✓ 使用版本: $latest_tag" || true
+    if [ "$PREBUILT_OK" -eq 0 ]; then
+        warn "回退到源码编译（约 10-15 分钟，编译期屏幕长时间无输出属正常）"
+        if [ ! -d "$LLAMA_CPP_DIR/.git" ]; then
+            rm -rf "$LLAMA_CPP_DIR"
+            git clone --depth 1 https://github.com/ggml-org/llama.cpp.git "$LLAMA_CPP_DIR"
+        fi
+
+        cd "$LLAMA_CPP_DIR"
+        git fetch --tags --depth 1 2>/dev/null || true
+        latest_tag=$(git tag -l 'b*' --sort=-v:refname | head -1)
+        if [ -n "$latest_tag" ]; then
+            git checkout "$latest_tag" 2>/dev/null && echo "  ✓ 使用版本: $latest_tag" || true
+        fi
+
+        # ROCm 编译。指定 AMDGPU_TARGETS 只编 gfx1100，大幅缩短编译时间。
+        mkdir -p build && cd build
+        cmake .. \
+            -DGGML_HIP=ON \
+            -DAMDGPU_TARGETS="$AMDGPU_TARGET" \
+            -DCMAKE_C_COMPILER=hipcc \
+            -DCMAKE_CXX_COMPILER=hipcc \
+            -DCMAKE_BUILD_TYPE=Release 2>&1 | tail -5
+        cmake --build . --config Release -j"$(nproc)" 2>&1 | tail -5
+
+        echo "  ✓ llama.cpp 编译完成"
     fi
-
-    # ROCm 编译。指定 AMDGPU_TARGETS 只编 gfx1100，大幅缩短编译时间。
-    mkdir -p build && cd build
-    cmake .. \
-        -DGGML_HIP=ON \
-        -DAMDGPU_TARGETS="$AMDGPU_TARGET" \
-        -DCMAKE_C_COMPILER=hipcc \
-        -DCMAKE_CXX_COMPILER=hipcc \
-        -DCMAKE_BUILD_TYPE=Release 2>&1 | tail -5
-    cmake --build . --config Release -j"$(nproc)" 2>&1 | tail -5
-
-    echo "  ✓ llama.cpp 编译完成"
 fi
 
 if [ -f "$LLAMA_CPP_DIR/build/bin/llama-server" ]; then
-    echo "  ✓ llama-server 可用"
+    echo "  ✓ llama-server 可用: $LLAMA_CPP_DIR/build/bin/llama-server"
 else
-    fail "llama-server 编译失败！查看上方 cmake 输出。"
+    fail "llama-server 获取失败！预编译下载与源码编译均未成功。"
     exit 1
 fi
 
