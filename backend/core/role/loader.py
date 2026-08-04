@@ -26,6 +26,7 @@ RoleLoader — 角色加载器
     master.dispatch("帮我写一篇文章")
 """
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -299,9 +300,37 @@ PROMPT_FILE_DIR = (
 )
 
 
+def get_prompt_variant() -> str:
+    """
+    当前提示词变体，由环境变量 PROMPT_VARIANT 控制。
+
+        PROMPT_VARIANT=slim   → 加载 prompt.slim.txt（精简版，600-900 字）
+        未设置 / 其他值        → 加载 prompt.txt（原版）
+
+    每次调用都重读环境变量，便于同一进程内做 A/B 切换测试。
+    """
+    return (os.getenv("PROMPT_VARIANT") or "").strip().lower()
+
+
 def _load_prompt_file(role_id: str) -> Optional[str]:
-    """读取角色的 prompt.txt 文件"""
-    prompt_file = PROMPT_FILE_DIR / role_id / "prompt.txt"
+    """
+    读取角色提示词文件。
+
+    变体优先级:
+        1. PROMPT_VARIANT=slim 且 prompt.slim.txt 存在 → 用精简版
+        2. 否则 → 用 prompt.txt 原版
+
+    精简版缺失时**自动回退原版**，因此允许只精简一部分角色而不影响其余角色。
+    原版文件始终保留，切回只需清空 PROMPT_VARIANT 环境变量。
+    """
+    role_dir = PROMPT_FILE_DIR / role_id
+
+    if get_prompt_variant() == "slim":
+        slim_file = role_dir / "prompt.slim.txt"
+        if slim_file.exists():
+            return slim_file.read_text(encoding="utf-8")
+
+    prompt_file = role_dir / "prompt.txt"
     if prompt_file.exists():
         return prompt_file.read_text(encoding="utf-8")
     return None
