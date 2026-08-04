@@ -1,3 +1,0 @@
-# 自定义工具目录
-# 用于存放邮件处理工具 email_tool.py 及其他自定义工具脚本。
-# 系统会根据 config.yaml 中的 email.tool_path 配置加载对应工具。
