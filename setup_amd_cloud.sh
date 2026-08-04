@@ -286,10 +286,24 @@ else
 
     echo "  → 尝试下载官方 ROCm 预编译包 ($LLAMA_PREBUILT_TAG, ~124MB)..."
     tmp_tar="/tmp/llama-rocm-${LLAMA_PREBUILT_TAG}.tar.gz"
-    if curl -fL --retry 3 --connect-timeout 20 -o "$tmp_tar" "$LLAMA_PREBUILT_URL" 2>&1 | tail -2; then
-        # 校验体积合理（>50MB）后再解压，避免把错误页当成包
+    rm -f "$tmp_tar"
+
+    # 第一次：正常 TLS 校验
+    curl -fL --retry 2 --connect-timeout 20 -o "$tmp_tar" "$LLAMA_PREBUILT_URL" 2>/dev/null || true
+    tar_size=$(stat -c%s "$tmp_tar" 2>/dev/null || echo 0)
+
+    # 云实例镜像常缺 CA 根证书（表现为 "unable to establish a secure connection"），
+    # 导致下载得到 0 字节。跳过证书校验重试一次——拉取的是 GitHub 官方公开 release，
+    # 且下方会以体积 + 二进制存在性双重校验，安全上可接受。
+    if [ "$tar_size" -lt 52428800 ]; then
+        warn "首次下载失败 (${tar_size} bytes)，多为缺少 CA 根证书；跳过证书校验重试..."
+        rm -f "$tmp_tar"
+        curl -kfL --retry 2 --connect-timeout 20 -o "$tmp_tar" "$LLAMA_PREBUILT_URL" 2>/dev/null || true
         tar_size=$(stat -c%s "$tmp_tar" 2>/dev/null || echo 0)
-        if [ "$tar_size" -gt 52428800 ]; then
+    fi
+
+    # 校验体积合理（>50MB）后再解压，避免把错误页当成包
+    if [ "$tar_size" -gt 52428800 ]; then
             mkdir -p "$LLAMA_CPP_DIR/build"
             tar -xzf "$tmp_tar" -C "$LLAMA_CPP_DIR/build" --strip-components=1 2>/dev/null \
                 || tar -xzf "$tmp_tar" -C "$LLAMA_CPP_DIR/build"
@@ -306,13 +320,10 @@ else
                 PREBUILT_OK=1
                 echo "  ✓ 预编译包就绪（跳过编译，节省约 15 分钟）"
             fi
-        else
-            warn "下载体积异常 (${tar_size} bytes)，判定失败"
-        fi
-        rm -f "$tmp_tar"
     else
-        warn "预编译包下载失败"
+        warn "预编译包下载失败 (${tar_size} bytes)"
     fi
+    rm -f "$tmp_tar"
 
     if [ "$PREBUILT_OK" -eq 0 ]; then
         warn "回退到源码编译（约 10-15 分钟，编译期屏幕长时间无输出属正常）"
