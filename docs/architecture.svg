@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 940" width="1200" height="940" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect width="1200" height="940" fill="#ffffff"/>
+
+  <!-- ============ TITLE ============ -->
+  <text x="40" y="44" font-size="24" font-weight="700" fill="#111827">MyAgent — Local Private AI Development Team</text>
+  <text x="40" y="68" font-size="14" fill="#6b7280">19 specialized AI roles · Fully offline on AMD Radeon PRO W7900 · Zero remote inference</text>
+
+  <!-- AMD badge -->
+  <rect x="948" y="26" width="212" height="46" rx="8" fill="#fef2f2" stroke="#ED1C24" stroke-width="1.5"/>
+  <text x="1054" y="45" font-size="12" font-weight="700" fill="#ED1C24" text-anchor="middle">AMD Radeon PRO W7900</text>
+  <text x="1054" y="62" font-size="11" fill="#991b1b" text-anchor="middle">48 GB · RDNA3 gfx1100 · ROCm 7.2</text>
+
+  <!-- ============ LOCAL BOUNDARY ============ -->
+  <rect x="30" y="92" width="1140" height="770" rx="14" fill="#fafafa" stroke="#9ca3af" stroke-width="2" stroke-dasharray="9 6"/>
+  <rect x="46" y="80" width="330" height="24" rx="6" fill="#ffffff"/>
+  <text x="56" y="97" font-size="13" font-weight="700" fill="#374151">LOCAL MACHINE BOUNDARY — no network egress</text>
+
+  <!-- ============ LAYER 1: CLIENT ============ -->
+  <rect x="60" y="120" width="480" height="66" rx="10" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+  <text x="80" y="146" font-size="15" font-weight="700" fill="#1e3a8a">Presentation Layer</text>
+  <text x="80" y="168" font-size="12.5" fill="#3b5998">Vue 3 SPA  ·  real-time chat UI  ·  role timeline  ·  memory inspector panel</text>
+
+  <rect x="560" y="120" width="290" height="66" rx="10" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+  <text x="580" y="146" font-size="15" font-weight="700" fill="#1e3a8a">Transport</text>
+  <text x="580" y="168" font-size="12.5" fill="#3b5998">WebSocket (token streaming) + REST</text>
+
+  <!-- privacy callout -->
+  <rect x="870" y="120" width="280" height="66" rx="10" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+  <text x="890" y="144" font-size="13" font-weight="700" fill="#166534">Privacy Guarantee</text>
+  <text x="890" y="164" font-size="11.5" fill="#15803d">No telemetry · no cloud sync · no</text>
+  <text x="890" y="179" font-size="11.5" fill="#15803d">user data leaves this machine</text>
+
+  <!-- arrow down -->
+  <path d="M 300 186 L 300 210" stroke="#9ca3af" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- ============ LAYER 2: API GATEWAY ============ -->
+  <rect x="60" y="212" width="790" height="76" rx="10" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1.5"/>
+  <text x="80" y="238" font-size="15" font-weight="700" fill="#5b21b6">API Gateway — FastAPI</text>
+  <text x="80" y="259" font-size="12.5" fill="#6d28d9">session routing · SSE/WS multiplexing · request validation · role invocation API</text>
+  <text x="80" y="277" font-size="12" fill="#7c3aed" font-weight="600">backend/api/  ·  backend/config/settings.py</text>
+
+  <!-- runtime guard -->
+  <rect x="870" y="212" width="280" height="76" rx="10" fill="#fef2f2" stroke="#fca5a5" stroke-width="2"/>
+  <text x="890" y="235" font-size="13" font-weight="700" fill="#b91c1c">Runtime Guard</text>
+  <text x="890" y="253" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#dc2626">assert_local_endpoint()</text>
+  <text x="890" y="270" font-size="11" fill="#991b1b">Non-localhost inference URL →</text>
+  <text x="890" y="283" font-size="11" fill="#991b1b">RemoteInferenceForbidden, boot aborts</text>
+
+  <path d="M 300 288 L 300 312" stroke="#9ca3af" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- ============ LAYER 3: ORCHESTRATOR ============ -->
+  <rect x="60" y="314" width="1090" height="70" rx="10" fill="#fffbeb" stroke="#fde68a" stroke-width="1.5"/>
+  <text x="80" y="340" font-size="15" font-weight="700" fill="#92400e">Orchestrator — Master Dispatcher</text>
+  <text x="80" y="362" font-size="12.5" fill="#b45309">intent parsing → task decomposition → role selection → pipeline execution → result aggregation</text>
+  <text x="820" y="340" font-size="12" font-weight="600" fill="#a16207">backend/core/orchestrator.py</text>
+  <text x="820" y="362" font-size="12" font-weight="600" fill="#a16207">backend/core/role/loader.py</text>
+
+  <path d="M 320 384 L 320 408" stroke="#9ca3af" stroke-width="2" marker-end="url(#ar)"/>
+  <path d="M 870 384 L 870 408" stroke="#9ca3af" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- ============ LAYER 4A: ROLE POOL ============ -->
+  <rect x="60" y="410" width="560" height="196" rx="10" fill="#ecfeff" stroke="#a5f3fc" stroke-width="1.5"/>
+  <text x="80" y="436" font-size="15" font-weight="700" fill="#155e75">Role Pool — 19 specialized agents</text>
+  <text x="80" y="455" font-size="11.5" fill="#0e7490">Each role = slim system prompt (≤900 chars) + capability tags + tool grants</text>
+
+  <!-- role chips -->
+  <g font-size="10.5" fill="#155e75">
+    <rect x="80" y="466" width="86" height="24" rx="12" fill="#ffffff" stroke="#67e8f9"/><text x="123" y="482" text-anchor="middle">master</text>
+    <rect x="172" y="466" width="86" height="24" rx="12" fill="#ffffff" stroke="#67e8f9"/><text x="215" y="482" text-anchor="middle">coach</text>
+    <rect x="264" y="466" width="96" height="24" rx="12" fill="#ffffff" stroke="#67e8f9"/><text x="312" y="482" text-anchor="middle">designer</text>
+    <rect x="366" y="466" width="104" height="24" rx="12" fill="#ffffff" stroke="#67e8f9"/><text x="418" y="482" text-anchor="middle">developer</text>
+    <rect x="476" y="466" width="98" height="24" rx="12" fill="#ffffff" stroke="#67e8f9"/><text x="525" y="482" text-anchor="middle">inspector</text>
+
+    <rect x="80" y="496" width="86" height="24" rx="12" fill="#ffffff" stroke="#67e8f9"/><text x="123" y="512" text-anchor="middle">tester</text>
+    <rect x="172" y="496" width="96" height="24" rx="12" fill="#ffffff" stroke="#67e8f9"/><text x="220" y="512" text-anchor="middle">deployer</text>
+    <rect x="274" y="496" width="128" height="24" rx="12" fill="#ffffff" stroke="#67e8f9"/><text x="338" y="512" text-anchor="middle">handoff_receiver</text>
+    <rect x="408" y="496" width="118" height="24" rx="12" fill="#ffffff" stroke="#67e8f9"/><text x="467" y="512" text-anchor="middle">quality_checker</text>
+
+    <rect x="80" y="526" width="104" height="24" rx="12" fill="#ffffff" stroke="#67e8f9"/><text x="132" y="542" text-anchor="middle">secretary</text>
+    <rect x="190" y="526" width="110" height="24" rx="12" fill="#ffffff" stroke="#67e8f9"/><text x="245" y="542" text-anchor="middle">hr_manager</text>
+    <rect x="306" y="526" width="150" height="24" rx="12" fill="#fef9c3" stroke="#facc15" stroke-width="1.5"/><text x="381" y="542" text-anchor="middle" font-weight="700" fill="#854d0e">experience_evaluator</text>
+    <rect x="462" y="526" width="112" height="24" rx="12" fill="#ffffff" stroke="#67e8f9"/><text x="518" y="542" text-anchor="middle">knowledge_ret.</text>
+  </g>
+  <text x="80" y="570" font-size="11" fill="#0891b2">+ creative · translator · writer · scheduler · visual_analyzer · cleaner  (auxiliary scenarios)</text>
+  <text x="80" y="592" font-size="11.5" font-weight="700" fill="#a16207">★ experience_evaluator is new — adjudicates the utility score of every stored experience</text>
+
+  <!-- ============ LAYER 4B: PIPELINES ============ -->
+  <rect x="640" y="410" width="510" height="196" rx="10" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1.5"/>
+  <text x="660" y="436" font-size="15" font-weight="700" fill="#075985">Workgroup Pipelines — 10 preset flows</text>
+  <text x="660" y="455" font-size="11.5" fill="#0369a1">Declarative JSON — data/workgroups/*.json — no code change to re-wire a team</text>
+
+  <text x="660" y="482" font-size="12.5" font-weight="700" fill="#0c4a6e">dev_full — the flagship 7-role relay</text>
+
+  <!-- pipeline chain -->
+  <g font-size="9.5" fill="#ffffff" text-anchor="middle">
+    <rect x="660" y="492" width="62" height="26" rx="5" fill="#0284c7"/><text x="691" y="509">coach</text>
+    <rect x="730" y="492" width="66" height="26" rx="5" fill="#0284c7"/><text x="763" y="509">designer</text>
+    <rect x="804" y="492" width="70" height="26" rx="5" fill="#0284c7"/><text x="839" y="509">developer</text>
+    <rect x="882" y="492" width="68" height="26" rx="5" fill="#0284c7"/><text x="916" y="509">inspector</text>
+    <rect x="958" y="492" width="56" height="26" rx="5" fill="#0284c7"/><text x="986" y="509">tester</text>
+    <rect x="1022" y="492" width="66" height="26" rx="5" fill="#0284c7"/><text x="1055" y="509">deployer</text>
+    <rect x="1096" y="492" width="44" height="26" rx="5" fill="#0891b2"/><text x="1118" y="509">eval</text>
+  </g>
+  <g stroke="#38bdf8" stroke-width="1.5" fill="none">
+    <path d="M 722 505 L 730 505"/><path d="M 796 505 L 804 505"/><path d="M 874 505 L 882 505"/>
+    <path d="M 950 505 L 958 505"/><path d="M 1014 505 L 1022 505"/><path d="M 1088 505 L 1096 505"/>
+  </g>
+
+  <text x="660" y="540" font-size="11.5" fill="#0369a1">Each hop carries forward: task context + prior artifacts + relevant retrieved memory.</text>
+  <text x="660" y="558" font-size="11.5" fill="#0369a1">Prompt slimming compounds here — 7 sequential prefills per run.</text>
+  <text x="660" y="582" font-size="11" fill="#0284c7">Other flows: quick_answer · code_review · report_writing · research · debug · deploy_only …</text>
+
+  <path d="M 340 606 L 340 630" stroke="#9ca3af" stroke-width="2" marker-end="url(#ar)"/>
+  <path d="M 870 606 L 870 630" stroke="#9ca3af" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- ============ LAYER 5: MEMORY ============ -->
+  <rect x="60" y="632" width="1090" height="118" rx="10" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5"/>
+  <text x="80" y="657" font-size="15" font-weight="700" fill="#14532d">Memory Layer — 4 tiers  <tspan font-size="11.5" font-weight="400" fill="#15803d">(the differentiator: what makes 19 agents a team rather than 19 strangers)</tspan></text>
+
+  <rect x="80" y="668" width="252" height="68" rx="8" fill="#ffffff" stroke="#86efac"/>
+  <text x="94" y="688" font-size="12.5" font-weight="700" fill="#166534">1 · Blackboard</text>
+  <text x="94" y="705" font-size="10.5" fill="#15803d">Shared short-term working context.</text>
+  <text x="94" y="720" font-size="10.5" fill="#15803d">Overwrite-on-update, not append —</text>
+  <text x="94" y="733" font-size="10.5" fill="#15803d">bounded context growth.</text>
+
+  <rect x="344" y="668" width="252" height="68" rx="8" fill="#fefce8" stroke="#facc15" stroke-width="1.5"/>
+  <text x="358" y="688" font-size="12.5" font-weight="700" fill="#854d0e">2 · Experience + Utility Score</text>
+  <text x="358" y="705" font-size="10.5" fill="#a16207">+1 reused · −1 unhelpful · −2 harmful</text>
+  <text x="358" y="720" font-size="10.5" fill="#a16207">Pool cap 15, lowest evicted; ≤ −3 purged.</text>
+  <text x="358" y="733" font-size="10.5" font-weight="600" fill="#854d0e">Bad experience self-replicates → must decay.</text>
+
+  <rect x="608" y="668" width="252" height="68" rx="8" fill="#ffffff" stroke="#86efac"/>
+  <text x="622" y="688" font-size="12.5" font-weight="700" fill="#166534">3 · Knowledge Base + TTL</text>
+  <text x="622" y="705" font-size="10.5" fill="#15803d">Retrieved facts carry an expiry stamp.</text>
+  <text x="622" y="720" font-size="10.5" fill="#15803d">Stale entries are excluded from recall</text>
+  <text x="622" y="733" font-size="10.5" fill="#15803d">instead of silently misleading roles.</text>
+
+  <rect x="872" y="668" width="258" height="68" rx="8" fill="#ffffff" stroke="#86efac"/>
+  <text x="886" y="688" font-size="12.5" font-weight="700" fill="#166534">4 · Per-Role Boundary</text>
+  <text x="886" y="705" font-size="10.5" fill="#15803d">Information firewall — a role reads only</text>
+  <text x="886" y="720" font-size="10.5" fill="#15803d">what its job requires. Limits prompt bloat</text>
+  <text x="886" y="733" font-size="10.5" fill="#15803d">and cross-role context contamination.</text>
+
+  <path d="M 600 750 L 600 774" stroke="#9ca3af" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- ============ LAYER 6: INFERENCE ============ -->
+  <rect x="60" y="776" width="1090" height="72" rx="10" fill="#fef2f2" stroke="#fecaca" stroke-width="1.5"/>
+  <text x="80" y="800" font-size="15" font-weight="700" fill="#991b1b">Inference Layer — llama.cpp server (OpenAI-compatible, 127.0.0.1:8000)</text>
+  <text x="80" y="822" font-size="12" fill="#b91c1c">Qwen2.5-14B-Instruct · GGUF Q4_K_M · <tspan font-family="ui-monospace, Menlo, Consolas, monospace">-ngl 99</tspan> full offload · ctx 8192→16384 · GQA KV-cache 0.1875 MiB/token</text>
+  <text x="80" y="840" font-size="12" font-weight="600" fill="#dc2626">Built with -DGGML_HIP=ON -DGGML_HIPBLAS=ON — all attention / FFN / embedding GEMMs on GPU</text>
+
+  <!-- ============ HARDWARE ============ -->
+  <rect x="30" y="874" width="1140" height="52" rx="10" fill="#1f2937"/>
+  <text x="52" y="898" font-size="14" font-weight="700" fill="#ffffff">HARDWARE</text>
+  <text x="150" y="898" font-size="13" fill="#e5e7eb">AMD Radeon PRO W7900  ·  48 GB GDDR6  ·  RDNA3 (gfx1100)  ·  ROCm 7.2  ·  Ubuntu 22.04</text>
+  <rect x="900" y="884" width="248" height="32" rx="6" fill="#ED1C24"/>
+  <text x="1024" y="905" font-size="12.5" font-weight="700" fill="#ffffff" text-anchor="middle">100% on-device inference</text>
+
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
+      <path d="M0,0 L0,6.4 L8,3.2 z" fill="#9ca3af"/>
+    </marker>
+  </defs>
+</svg>
