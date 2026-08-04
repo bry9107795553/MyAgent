@@ -21,7 +21,8 @@ echo -e "${YELLOW}========================================${NC}"
 echo ""
 echo -e "  [1/3] 停止 Nginx..."
 if pgrep -x nginx > /dev/null; then
-    sudo nginx -s stop 2>/dev/null || sudo pkill nginx
+    if [ "$(id -u)" -eq 0 ] || ! command -v sudo >/dev/null 2>&1; then SUDO=""; else SUDO="sudo"; fi
+    $SUDO nginx -s stop 2>/dev/null || $SUDO pkill nginx 2>/dev/null || true
     echo -e "  ${GREEN}✓${NC} Nginx 已停止"
 else
     echo -e "  Nginx 未运行"

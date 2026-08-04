@@ -155,13 +155,28 @@ fi
 echo ""
 echo -e "${YELLOW}[3/3] 启动 Nginx...${NC}"
 
-if pgrep -x nginx > /dev/null; then
-    echo -e "  Nginx 已在运行，重新加载配置..."
-    sudo nginx -s reload
+# 云镜像常以 root 直接登录且未安装 sudo；有 sudo 才用，否则直接执行。
+if [ "$(id -u)" -eq 0 ] || ! command -v sudo >/dev/null 2>&1; then
+    SUDO=""
 else
-    sudo nginx -c /etc/nginx/nginx.conf
+    SUDO="sudo"
 fi
-echo -e "  ${GREEN}✓${NC} Nginx 已启动 (端口 80)"
+
+if ! command -v nginx >/dev/null 2>&1; then
+    echo -e "  ${YELLOW}⚠${NC} 未安装 nginx，跳过（端口 80 前端不可用）"
+    echo -e "  ${YELLOW}⚠${NC} 后端仍可直连: http://<实例IP>:8080/docs"
+elif pgrep -x nginx > /dev/null; then
+    echo -e "  Nginx 已在运行，重新加载配置..."
+    $SUDO nginx -s reload || echo -e "  ${YELLOW}⚠${NC} reload 失败，忽略"
+    echo -e "  ${GREEN}✓${NC} Nginx 已启动 (端口 80)"
+else
+    if $SUDO nginx -c /etc/nginx/nginx.conf; then
+        echo -e "  ${GREEN}✓${NC} Nginx 已启动 (端口 80)"
+    else
+        echo -e "  ${YELLOW}⚠${NC} Nginx 启动失败（不影响后端）"
+        echo -e "  ${YELLOW}⚠${NC} 排查: nginx -t   |  直连后端: http://<实例IP>:8080/docs"
+    fi
+fi
 
 # ===== 完成 =====
 echo ""
