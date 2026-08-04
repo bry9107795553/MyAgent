@@ -166,9 +166,9 @@ fi
 # nginx worker 以 www-data 运行，无法穿越 /root (mode 700)，
 # 直接把 root 指向仓库内的 frontend/dist 会得到 403/500。
 WEB_ROOT="/var/www/myagent"
-if [ -f "$PROJECT_DIR/frontend/dist/index.html" ]; then
+if [ -f "$FRONTEND_DIR/dist/index.html" ]; then
     $SUDO mkdir -p "$WEB_ROOT"
-    $SUDO cp -r "$PROJECT_DIR/frontend/dist/." "$WEB_ROOT/" 2>/dev/null || true
+    $SUDO cp -r "$FRONTEND_DIR/dist/." "$WEB_ROOT/" 2>/dev/null || true
     $SUDO chmod -R a+rX "$WEB_ROOT" 2>/dev/null || true
     echo -e "  ${GREEN}✓${NC} 前端产物已同步 → $WEB_ROOT"
 fi
