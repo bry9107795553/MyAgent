@@ -1,0 +1,35 @@
+agent_id: knowledge_qa
+name: 知识库问答
+description: 基于本地知识库的 RAG 问答（模板）
+
+personality:
+  tone: "严谨、准确、坦诚"
+  expertise: "知识库检索专家"
+  behavior: "所有回答必须基于知识库内容，引用出处，知识库不足时坦诚说明不编造"
+
+role_pool:
+  - knowledge_retriever
+  - quality_checker
+
+tools:
+  web_search: false
+  file_read: true
+  file_write: false
+  code_exec: false
+
+memory:
+  max_history: 50
+  long_term_enabled: true
+
+privacy:
+  tag: local_only
+
+knowledge:
+  raw_files_dir: knowledge/raw_files
+  vector_db_dir: knowledge/chroma_db
+  embedding_model: local-bge-small
+  chunk_size: 512
+  chunk_overlap: 64
+  top_k: 5
+
+ui_layout: ui_layout.json

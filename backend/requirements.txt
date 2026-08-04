@@ -1,0 +1,44 @@
+# ===== Web 框架 =====
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+websockets==12.0
+
+# ===== LLM 推理 (纯本地 llama.cpp) =====
+# openai 仅作为 "OpenAI 兼容协议" 的客户端库，base_url 恒指向本机 llama-server。
+# 本项目不含任何托管模型服务的 SDK / 密钥 / 降级通道。
+# 端点合法性由 backend/config/settings.py::assert_local_endpoint() 运行时强制校验。
+openai==1.51.0          # OpenAI 协议客户端 → http://localhost:8000/v1
+httpx==0.27.2           # 异步 HTTP 客户端 (openai 的传输层)
+
+# ===== 数据校验 =====
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# ===== 配置管理 =====
+pyyaml==6.0.2           # 读取 config.yaml
+
+# ===== 文件监听 (Agent 热加载) =====
+watchdog==5.0.3
+
+# ===== 已移除的依赖 (P0 依赖清理，2026-08-04) =====
+# chromadb==0.5.5   全项目 0 处 import；且其传递依赖 chroma-hnswlib / numpy<2.0
+#                   在 Python 3.13 无预编译轮子，需 MSVC 源码编译 → Windows 装不上。
+#                   RAG 由 backend/core/memory/knowledge_base.py 的三元组知识库承担。
+# aiofiles==24.1.0  全项目 0 处 import
+# json5==0.9.25     全项目 0 处 import
+# 以上三项均已核实无任何引用点，移除不影响运行。
+
+# ===== 已移到可选依赖 (P0 依赖清理，2026-08-04) =====
+# Pillow / scikit-learn 仅被 backend/core/skin/manager.py::extract_colors_from_image()
+# 使用（皮肤取色，非核心功能），且该函数已用 try/except ImportError 做了优雅降级：
+# 未安装时返回 {"success": False, "error": "缺少图像处理依赖库"}，不影响任何其他功能。
+# 但 scikit-learn 会传递引入 scipy(36.6MB) + numpy(12.4MB)，连同自身共约 62MB，
+# 在弱网 Windows 环境下安装耗时可达 45 分钟以上，属于"为非核心功能付核心代价"。
+# 现移至 requirements-optional.txt，需要图片取色时再单独安装。
+#   Pillow==10.4.0
+#   scikit-learn==1.5.2
+
+# ===== 配置文件加载 =====
+# pydantic-settings 的 env_file=".env" 功能依赖它 (Settings.model_config)
+python-dotenv==1.0.1

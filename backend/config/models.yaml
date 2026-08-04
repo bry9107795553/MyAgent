@@ -1,0 +1,24 @@
+# MyAgent 模型配置
+# llama.cpp (llama-server) 启动后在 localhost:8000 提供 OpenAI 兼容接口
+
+profiles:
+  - id: "local-qwen2.5-14b"
+    provider: "llama_cpp"
+    base_url: "http://localhost:8000/v1"
+    model_name: "Qwen2.5-14B-Instruct"
+    api_key: "EMPTY"
+    capabilities:
+      - chat
+      - tool_calling
+      - streaming
+    privacy_tag: "local_only"          # 强制本地推理，断网可用
+    max_model_len: 32768
+    default_temperature: 0.7
+    default_max_tokens: 4096
+
+  # ⚠ 本文件只允许出现 base_url 指向本机 (localhost / 127.0.0.1) 的 profile。
+  # 原「cloud-zhipu」远程模型 profile 已于 P0 合规清理中删除 ——
+  # 赛道规则要求核心推理不得使用远程 API，本项目全部推理跑在本机
+  # llama.cpp (ROCm / AMD Radeon GPU) 上。
+  #
+  # 多 GPU 场景请新增指向 http://localhost:8001/v1 等本机端口的 profile。

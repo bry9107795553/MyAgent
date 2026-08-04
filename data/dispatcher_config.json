@@ -1,0 +1,257 @@
+﻿{
+  "version": "1.1",
+  "updated": "2026-08-01",
+  "description": "调度器配置：预设工作组匹配规则 + 动态组装逻辑 + GPU分配策略 + 项目状态路由",
+
+  "matching": {
+    "strategy": "keyword_first_then_semantic",
+    "description": "先用关键词精确匹配，未命中则用语义相似度匹配，仍未命中则动态组装",
+
+    "step_1_keyword_match": {
+      "description": "遍历所有预设工作组的trigger_keywords，精确匹配",
+      "threshold": "exact_match",
+      "action_on_match": "使用该工作组流水线"
+    },
+
+    "step_2_semantic_match": {
+      "description": "用embedding计算用户请求与工作组trigger_examples的相似度",
+      "threshold": 0.75,
+      "action_on_match": "使用该工作组流水线，但记录匹配分数供后续优化"
+    },
+
+    "step_3_dynamic_assembly": {
+      "description": "未命中任何预设时，主控动态选角色组装临时流水线",
+      "action": "进入动态组装流程"
+    }
+  },
+
+  "dynamic_assembly": {
+    "description": "主控从角色池中分析需要什么能力，匹配角色，生成DAG流水线",
+
+    "rules": [
+      {
+        "rule": "capability_match",
+        "description": "分析用户请求需要哪些能力，从role_pool.json中匹配具备该能力的角色",
+        "example": "用户要'翻译这篇文档并检查质量' → 需要translation + fact_checking → 匹配translator + quality_checker"
+      },
+      {
+        "rule": "project_state_routing",
+        "description": "开发类任务根据项目状态分流：检查PROJECT_STATUS.md是否存在且状态为'已完成'/'Phase 3完成'，是则路由到handoff_receiver，否则路由到coach",
+        "trigger": "dev_group_tasks",
+        "status_check_path": "data/projects/{project_name}/PROJECT_STATUS.md",
+        "route_completed": "handoff_receiver → dev_modification 工作组",
+        "route_new": "coach → dev_full 工作组"
+      },
+      {
+        "rule": "min_roles",
+        "description": "能用单角色完成的任务不组装工作组，直接派单",
+        "example": "用户要'翻译这段话' → 只需translator，不组装工作组"
+      },
+      {
+        "rule": "quality_gate",
+        "description": "涉及内容产出的任务必须加质检角色作为质量门禁",
+        "example": "写作类任务 → writer产出 + quality_checker门禁"
+      },
+      {
+        "rule": "revision_loop",
+        "description": "有质检的任务必须配置返工循环，最多3次",
+        "default_max_revisions": 3
+      },
+      {
+        "rule": "parallel_detection",
+        "description": "识别无依赖的子任务并行执行，有依赖的严格按序",
+        "example": "搜索3个不同主题 → knowledge_retriever并行3次；写代码→审查→测试 → 串行"
+      },
+      {
+        "rule": "cleanup_hook",
+        "description": "开发类任务结束后自动追加cleaner清理临时文件",
+        "trigger": "dev_group_tasks"
+      },
+      {
+        "rule": "coach_first",
+        "description": "开发类任务：新项目先派coach做需求发现，已有项目先派handoff_receiver做代码理解和影响面评估。由project_state_routing规则决定",
+        "trigger": "dev_group_tasks"
+      }
+    ],
+
+    "capability_to_role_map": {
+      "requirement_discovery": "coach",
+      "competitive_research": ["coach", "knowledge_retriever"],
+      "teaching": "coach",
+      "rag_search": "knowledge_retriever",
+      "web_search": "knowledge_retriever",
+      "document_parsing": "knowledge_retriever",
+      "report_writing": "writer",
+      "email_drafting": "writer",
+      "copywriting": "writer",
+      "fact_checking": "quality_checker",
+      "logic_verification": "quality_checker",
+      "conflict_detection": "quality_checker",
+      "schedule_scanning": "scheduler",
+      "time_management": "scheduler",
+      "brainstorming": "creative",
+      "insight_extraction": "creative",
+      "translation": "translator",
+      "image_analysis": "visual_analyzer",
+      "design_system": "designer",
+      "page_inventory": "designer",
+      "module_implementation": "developer",
+      "tech_debt_management": "developer",
+      "architecture_review": "inspector",
+      "tech_debt_identification": "inspector",
+      "compilation_check": "tester",
+      "lint_check": "tester",
+      "unit_test": "tester",
+      "build": "deployer",
+      "deploy": "deployer",
+      "garbage_scan": "cleaner",
+      "unused_file_detection": "cleaner",
+      "code_reading": "handoff_receiver",
+      "impact_assessment": "handoff_receiver",
+      "modification_dispatch": "handoff_receiver",
+      "backlog_tracking": "handoff_receiver"
+    },
+
+    "template_learning": {
+      "description": "动态组装的工作组如果被使用超过3次，自动保存为新预设模板",
+      "threshold": 3,
+      "save_path": "data/workgroups/custom_{name}.json",
+      "notification": "主控通知用户：'这个任务模式已使用{N}次，已保存为预设模板，下次将自动匹配'"
+    }
+  },
+
+  "gpu_scheduling": {
+    "strategy": "affinity_based_with_fallback",
+
+    "rules": [
+      {
+        "rule": "affinity_first",
+        "description": "角色优先分配到其gpu_affinity指定的GPU"
+      },
+      {
+        "rule": "load_balance",
+        "description": "同一GPU上多个角色排队执行，不同GPU上的角色可并行"
+      },
+      {
+        "rule": "vision_exclusive",
+        "description": "visual_analyzer必须在GPU1运行（多模态模型独占）"
+      },
+      {
+        "rule": "no_cross_gpu_session",
+        "description": "同一角色的同一任务在同一个GPU上完成，不在执行中途切换GPU"
+      }
+    ],
+
+    "parallel_matrix": {
+      "gpu0_roles": ["master", "coach", "writer", "creative", "designer", "developer", "handoff_receiver"],
+      "gpu1_roles": ["knowledge_retriever", "scheduler", "translator", "visual_analyzer"],
+      "gpu2_roles": ["quality_checker", "inspector", "tester", "deployer", "cleaner", "hr_manager"],
+      "max_parallel": 3,
+      "description": "最多3个角色同时在不同GPU上并行执行"
+    },
+
+    "conflict_resolution": {
+      "same_gpu": "排队执行，先到先得",
+      "cross_gpu": "可并行，无需协调",
+      "shared_resource": "文件系统写入操作通过锁机制串行化"
+    }
+  },
+
+  "priority": {
+    "levels": {
+      "urgent": {
+        "description": "紧急任务，跳过预设匹配，直接指定最相关角色",
+        "examples": ["修复线上bug", "紧急部署"],
+        "behavior": "跳过workgroup匹配，直接dispatch"
+      },
+      "normal": {
+        "description": "常规任务，正常走匹配流程",
+        "behavior": "keyword → semantic → dynamic"
+      },
+      "background": {
+        "description": "后台任务，低优先级执行",
+        "examples": ["清理临时文件", "技术债扫描"],
+        "behavior": "空闲时执行，不阻塞前台任务"
+      }
+    }
+  },
+
+  "firewall_rules": {
+    "description": "主控作为信息防火墙的规则",
+
+    "rules": [
+      {
+        "rule": "minimal_info",
+        "description": "向角色下发任务时只传递该角色执行任务所需的最小信息",
+        "enforcement": "主控在dispatch前自动裁剪任务包"
+      },
+      {
+        "rule": "no_author_identity",
+        "description": "转发代码时不附作者信息，转发审查意见时不附审查者身份",
+        "enforcement": "裁剪时去除from字段中的角色身份"
+      },
+      {
+        "rule": "no_cross_talk",
+        "description": "角色之间不直接通信，所有通信经主控路由",
+        "enforcement": "黑板消息必须经route_message中转"
+      },
+      {
+        "rule": "desensitize",
+        "description": "转发结果前按需脱敏，不泄露其他角色的内部思考",
+        "enforcement": "裁剪内部推理过程，只保留结论和产出"
+      }
+    ]
+  },
+
+  
+  "role_activation_tiers": {
+    "description": "角色分级激活策略：按使用频率和系统负载分为三级，优化资源利用",
+    "version": "1.0",
+    "updated": "2026-08-01",
+
+    "tier_1_always_on": {
+      "description": "常驻角色：系统启动时加载，全程保持活跃",
+      "roles": ["master", "coach"],
+      "rationale": "master 是所有请求的入口，coach 是开发流程起点，两者必须随时可用",
+      "behavior": "RoleLoader.load_all() 时自动加载，不卸载"
+    },
+
+    "tier_2_on_demand": {
+      "description": "按需角色：首次调用时加载，会话内缓存复用",
+      "roles": ["knowledge_retriever", "writer", "quality_checker", "designer", "developer", "inspector", "tester", "deployer", "cleaner", "handoff_receiver"],
+      "rationale": "这些角色在特定任务中频繁使用，但并非每次请求都需要",
+      "behavior": "首次调用时 RoleLoader.load_role() 加载，会话内缓存，最多同时 8 个",
+      "warm_up": ["knowledge_retriever", "writer"],
+      "hot_path": {
+        "dev_flow": ["coach", "designer", "developer", "inspector", "tester", "deployer", "cleaner"],
+        "content_flow": ["knowledge_retriever", "writer", "quality_checker"],
+        "modification_flow": ["handoff_receiver", "inspector", "developer", "tester", "deployer", "cleaner"]
+      }
+    },
+
+    "tier_3_low_frequency": {
+      "description": "低频角色：仅在用户明确需要时加载，用完即卸载",
+      "roles": ["hr_manager", "creative", "translator", "scheduler", "visual_analyzer"],
+      "rationale": "使用频率低或需要特殊资源（如 visual_analyzer 需多模态模型）",
+      "behavior": "用户明确请求时加载，空闲 300 秒后自动卸载"
+    }
+  },"error_handling": {
+    "role_timeout": {
+      "description": "角色超时未响应",
+      "timeout_seconds": 120,
+      "action": "标记异常，通知用户，询问是否重试或换角色"
+    },
+    "role_failure": {
+      "description": "角色执行失败",
+      "action": "重试1次 → 仍失败则降级处理（换模型或简化任务）→ 通知用户"
+    },
+    "revision_limit": {
+      "description": "返工达到上限",
+      "action": "交付当前最优版本，标注未解决问题，通知用户"
+    },
+    "gpu_failure": {
+      "description": "GPU实例宕机",
+      "action": "切换到备用GPU2（如GPU2本身宕机则通知用户硬件故障）"
+    }
+  }
+}

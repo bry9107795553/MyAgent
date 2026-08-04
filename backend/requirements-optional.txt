@@ -1,0 +1,22 @@
+# ===== 可选依赖 (Optional Dependencies) =====
+#
+# 本文件中的包**不是运行 MyAgent 所必需的**。
+# 主依赖请安装 requirements.txt，本文件仅在需要下列功能时才安装：
+#
+#   pip install -r requirements-optional.txt
+#
+# ---------------------------------------------------------------------------
+# 功能：皮肤色彩分析（从上传图片提取主色调，自动生成 UI 配色方案）
+# 入口：backend/core/skin/manager.py::extract_colors_from_image()
+#       backend/api/routes/skin_routes.py  POST /api/skin/extract-colors
+#
+# 未安装时的行为：该接口返回
+#   {"success": false, "colors": [], "error": "缺少图像处理依赖库: ..."}
+# 系统其余部分（对话、角色调度、工作组流水线、记忆系统）完全不受影响。
+#
+# 安装体积提示：scikit-learn 会传递引入 scipy(~36MB) + numpy(~12MB)，
+# 连同 Pillow 共约 62MB，弱网环境下请预留充足时间。
+# ---------------------------------------------------------------------------
+
+Pillow==10.4.0
+scikit-learn==1.5.2     # KMeans 色彩聚类（传递依赖：numpy、scipy、joblib、threadpoolctl）

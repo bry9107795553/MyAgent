@@ -1,0 +1,35 @@
+[
+  {
+    "task_type": "git_push",
+    "keywords": ["推送", "push", "github", "git", "提交代码", "上传代码", "代码推送", "推代码", "推到", "推到github", "push代码"],
+    "context": "受限 Windows 环境下推送到 GitHub 远程仓库，使用便携版 Git",
+    "constraints": [
+      "沙箱环境的文件系统可能有路径白名单限制，只能在工作区目录下操作文件",
+      "系统临时目录可能不在白名单中，Copy-Item 到该目录会被拒绝",
+      "gh CLI (GitHub CLI) 通常未安装",
+      "可能只有便携版 Git 可用，需使用其绝对路径调用",
+      "系统 Git 配置可能损坏，需要设置 GIT_CONFIG_NOSYSTEM=1",
+      "Windows 凭据管理器可能不可用，可能需要手动处理认证"
+    ],
+    "successful_approach": [
+      "1. 确认源文件存在: Test-Path '<项目目录>'",
+      "2. 确认便携 Git 可用: Test-Path '<PortableGit>/cmd/git.exe'",
+      "3. 在白名单允许的路径下创建临时目录，或直接在项目目录内操作",
+      "4. 设置 Git 环境变量: $env:GIT_CONFIG_NOSYSTEM='1'; $env:HOME='<可写目录>'",
+      "5. 配置 Git 用户: git config user.email '<email>'; git config user.name '<name>'",
+      "6. 关闭 SSL 验证（仅在证书链不可用时）: git config http.sslVerify false",
+      "7. 添加远程仓库: git remote add origin https://github.com/<owner>/<repo>.git",
+      "8. git add -A; git commit -m '...'; git push origin main",
+      "9. 如果遇到认证问题，使用 GitHub Personal Access Token 作为密码",
+      "10. 推送成功后清理临时目录"
+    ],
+    "failed_attempts": [
+      "在白名单外的目录操作 → 文件系统白名单拦截 Copy-Item",
+      "使用 gh CLI 推送 → gh 未安装",
+      "不设置 GIT_CONFIG_NOSYSTEM → Git 配置读取失败",
+      "不设置 HOME 环境变量 → Git 找不到配置文件"
+    ],
+    "timestamp": "2026-08-01T12:00:00Z",
+    "success_count": 1
+  }
+]

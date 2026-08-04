@@ -1,0 +1,105 @@
+# ============================================================
+# Python
+# ============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+*.egg
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+# NOTE: git does NOT support inline comments in .gitignore.
+# Each pattern must be on its own line with no trailing text.
+venv/
+.venv/
+env/
+ENV/
+.venv-diag/
+.venv-*/
+
+# ============================================================
+# Node / frontend
+# ============================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.pnpm-store/
+
+# ============================================================
+# Build output
+# ============================================================
+dist/
+build/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# ============================================================
+# Model weights (never commit — multi-GB)
+# ============================================================
+*.gguf
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.onnx
+models/
+!backend/config/models.yaml
+
+# ============================================================
+# Secrets / environment
+# ============================================================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+!**/public.key
+secrets.json
+credentials.json
+
+# ============================================================
+# Runtime data (regenerated at runtime, not source)
+# ============================================================
+*.log
+logs/
+backend/data/agents/*/memory/chat_history.json
+backend/data/agents/*/memory/long_term.json
+data/agents/*/memory/chat_history.json
+data/agents/*/memory/long_term.json
+data/sessions/
+*.pid
+
+# ============================================================
+# Caches
+# ============================================================
+.cache/
+.tmp/
+tmp/
+*.tmp
+*.bak
+*.orig
+
+# ============================================================
+# IDE / editor
+# ============================================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ============================================================
+# OS
+# ============================================================
+.DS_Store
+Thumbs.db
+desktop.ini
