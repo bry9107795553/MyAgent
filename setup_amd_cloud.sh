@@ -185,7 +185,15 @@ fi
 step "1/9" "检查系统依赖"
 
 if command -v rocminfo &> /dev/null; then
-    gpu_name=$(rocminfo 2>/dev/null | grep -m1 'Marketing Name' | cut -d: -f2- | xargs)
+    # rocminfo 会先列出 CPU agent，直接取第一条会误报成 CPU 型号。
+    # 先尝试 rocm-smi（只列 GPU），失败再回退 rocminfo 并过滤掉 CPU 关键词。
+    gpu_name=$(rocm-smi --showproductname --csv 2>/dev/null \
+        | awk -F, 'NR>1 && $2 != "" {print $2; exit}' | xargs 2>/dev/null || true)
+    if [ -z "$gpu_name" ]; then
+        gpu_name=$(rocminfo 2>/dev/null | grep 'Marketing Name' | cut -d: -f2- \
+            | grep -viE 'epyc|xeon|core processor|ryzen|threadripper' \
+            | head -1 | xargs 2>/dev/null || true)
+    fi
     echo "  ✓ GPU: ${gpu_name:-unknown}"
     gfx=$(rocminfo 2>/dev/null | grep -m1 -o 'gfx[0-9a-z]*' || true)
     echo "  ✓ 架构: ${gfx:-unknown}  (期望 gfx1100)"
@@ -388,25 +396,51 @@ echo "  ✓ Python 依赖已安装"
 # ============================================================
 step "7/9" "构建前端"
 
+FRONTEND_OK=0
+
+# --- 确保有 Node.js（三级回退，任何一级失败都不中断整个部署）---
 if ! command -v node &> /dev/null; then
+    echo "  · 未检测到 Node.js，尝试安装…"
+
+    # 1) nvm（官方推荐，需能访问 raw.githubusercontent.com）
     export NVM_DIR="$HOME/.nvm"
     if [ ! -d "$NVM_DIR" ]; then
-        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+        curl -fsSL --connect-timeout 15 --max-time 120 \
+            -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash || true
     fi
     # shellcheck disable=SC1091
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    nvm install 22
-    nvm use 22
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" || true
+    if command -v nvm &> /dev/null; then
+        nvm install 22 >/dev/null 2>&1 || true
+        nvm use 22    >/dev/null 2>&1 || true
+    fi
+
+    # 2) 回退：发行版仓库
+    if ! command -v node &> /dev/null; then
+        echo "  · nvm 不可用，回退 apt…"
+        sudo apt-get install -y -qq nodejs npm >/dev/null 2>&1 || true
+    fi
 fi
 
-echo "  ✓ Node.js: $(node --version)"
-echo "  ✓ npm: $(npm --version)"
+if command -v node &> /dev/null && command -v npm &> /dev/null; then
+    echo "  ✓ Node.js: $(node --version)"
+    echo "  ✓ npm: $(npm --version)"
 
-cd "$PROJECT_DIR/frontend"
-npm install --silent 2>&1 | tail -3
-npm run build 2>&1 | tail -5
+    cd "$PROJECT_DIR/frontend"
+    if npm install --silent 2>&1 | tail -3 && npm run build 2>&1 | tail -5; then
+        if [ -d "$PROJECT_DIR/frontend/dist" ]; then
+            FRONTEND_OK=1
+            echo "  ✓ 前端构建完成 → $PROJECT_DIR/frontend/dist"
+        fi
+    fi
+    cd "$PROJECT_DIR"
+fi
 
-echo "  ✓ 前端构建完成 → $PROJECT_DIR/frontend/dist"
+if [ "$FRONTEND_OK" -ne 1 ]; then
+    warn "前端构建未完成（Node.js 缺失或 npm 失败）。"
+    warn "后端 API (:8080) 与推理引擎 (:8000) 不受影响，仍可正常演示。"
+    warn "补救: cd $PROJECT_DIR/frontend && npm install && npm run build"
+fi
 
 # ============================================================
 # Step 8: 配置 Nginx（单端口 80 统一入口）
