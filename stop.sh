@@ -22,7 +22,15 @@ echo ""
 echo -e "  [1/3] 停止 Nginx..."
 if pgrep -x nginx > /dev/null; then
     if [ "$(id -u)" -eq 0 ] || ! command -v sudo >/dev/null 2>&1; then SUDO=""; else SUDO="sudo"; fi
-    $SUDO nginx -s stop 2>/dev/null || $SUDO pkill nginx 2>/dev/null || true
+    $SUDO nginx -s stop 2>/dev/null || true
+    sleep 1
+    # 优雅停止常留下 worker 残渣，导致下次 start 的 pgrep 误判为"仍在运行"
+    # 而去 reload（此时 /run/nginx.pid 已消失，必然失败）。这里强杀到干净为止。
+    if pgrep -x nginx > /dev/null; then
+        $SUDO pkill -9 -x nginx 2>/dev/null || true
+        sleep 1
+    fi
+    $SUDO rm -f /run/nginx.pid 2>/dev/null || true
     echo -e "  ${GREEN}✓${NC} Nginx 已停止"
 else
     echo -e "  Nginx 未运行"

@@ -176,16 +176,26 @@ fi
 if ! command -v nginx >/dev/null 2>&1; then
     echo -e "  ${YELLOW}⚠${NC} 未安装 nginx，跳过（端口 80 前端不可用）"
     echo -e "  ${YELLOW}⚠${NC} 后端仍可直连: http://<实例IP>:8080/docs"
-elif pgrep -x nginx > /dev/null; then
-    echo -e "  Nginx 已在运行，重新加载配置..."
-    $SUDO nginx -s reload || echo -e "  ${YELLOW}⚠${NC} reload 失败，忽略"
-    echo -e "  ${GREEN}✓${NC} Nginx 已启动 (端口 80)"
 else
-    if $SUDO nginx -c /etc/nginx/nginx.conf; then
-        echo -e "  ${GREEN}✓${NC} Nginx 已启动 (端口 80)"
+    # reload 依赖 /run/nginx.pid。stop.sh 用 pkill 停过之后常残留 worker，
+    # 此时 pgrep 判定"在运行"但 pid 文件已消失，reload 必然失败。
+    # 因此：先尝试 reload，失败就强杀残留后冷启动，最后用 HTTP 探活确认真启动。
+    if pgrep -x nginx > /dev/null && $SUDO nginx -s reload 2>/dev/null; then
+        echo -e "  ${GREEN}✓${NC} Nginx 配置已重载"
     else
-        echo -e "  ${YELLOW}⚠${NC} Nginx 启动失败（不影响后端）"
-        echo -e "  ${YELLOW}⚠${NC} 排查: nginx -t   |  直连后端: http://<实例IP>:8080/docs"
+        $SUDO pkill -9 -x nginx 2>/dev/null || true
+        sleep 1
+        $SUDO nginx -c /etc/nginx/nginx.conf 2>&1 | tail -3 || true
+    fi
+
+    sleep 1
+    nginx_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost/ 2>/dev/null || echo "000")
+    if [ "$nginx_code" = "200" ]; then
+        echo -e "  ${GREEN}✓${NC} Nginx 已就绪 (端口 80, HTTP 200)"
+    else
+        echo -e "  ${YELLOW}⚠${NC} Nginx 未正常响应 (HTTP $nginx_code)，不影响后端"
+        echo -e "  ${YELLOW}⚠${NC} 排查: nginx -t  |  tail -5 /var/log/nginx/error.log"
+        echo -e "  ${YELLOW}⚠${NC} 直连后端: http://<实例IP>:8080/docs"
     fi
 fi
 
