@@ -11,7 +11,7 @@ A fully local, privacy-first AI agent platform powered by AMD Radeon GPUs and RO
 
 MyAgent is designed for users who need a capable AI assistant without sacrificing data privacy:
 
-- **Software Development**: Full development lifecycle from requirements analysis to deployment, orchestrated by 15 specialized AI roles (Coach, Designer, Developer, Inspector, Tester, Deployer)
+- **Software Development**: Full development lifecycle from requirements analysis to deployment, orchestrated by 19 specialized AI roles (Coach, Designer, Developer, Inspector, Tester, Deployer)
 - **Knowledge Work**: Research reports, document writing, translation, and data analysis with multi-role quality assurance
 - **Personal Productivity**: Schedule management, creative brainstorming, code review, and file organization
 - **Offline-First Environments**: Fully functional without internet — ideal for air-gapped or low-connectivity scenarios
@@ -37,7 +37,7 @@ MyAgent uses a **4-layer hierarchical architecture** with a central orchestrator
 |  knowledge/  → knowledge base · ui_layout.json     |
 +---------------------------------------------------+
 |  L2  Orchestration Layer (Always Running)           |
-|  FastAPI + WebSocket + Dispatcher + 15 Roles        |
+|  FastAPI + WebSocket + Dispatcher + 19 Roles        |
 |  + 4-Level Progressive Memory + Shared Blackboard  |
 |  Master Dispatch · Role Collaboration · Agent Gen  |
 +---------------------------------------------------+
@@ -47,12 +47,16 @@ MyAgent uses a **4-layer hierarchical architecture** with a central orchestrator
 +---------------------------------------------------+
 ```
 
-### 15-Role System
+### 19-Role System
 
 The Master role acts as a **firewall and dispatcher** — all requests go through it, and roles never communicate directly.
 
-| Group | Role | GPU | Model | Capability |
-|-------|------|-----|-------|------------|
+18 roles are declared in `data/role_pool.json` and dispatched by Master; the Secretary is an always-on background role implemented in `backend/core/agent/orchestrator.py` (it observes every turn rather than being dispatched).
+
+The **GPU column is the affinity tag** used for optional multi-GPU scale-out. In the default single-GPU deployment all roles run on the one physical GPU — see [Single-GPU Deployment](#2-single-gpu-deployment-default--as-demonstrated).
+
+| Group | Role | GPU Affinity | Model Class | Capability |
+|-------|------|--------------|-------------|------------|
 | General | Master | GPU0 | 14B | Dispatch / Firewall / Summarization |
 | General | Knowledge Retriever | GPU1 | 7B | RAG / Web Search |
 | General | Writer | GPU0 | 14B | Reports / Emails / Copywriting |
@@ -60,28 +64,37 @@ The Master role acts as a **firewall and dispatcher** — all requests go throug
 | General | Scheduler | GPU1 | 7B | Time Management |
 | General | Creative | GPU0 | 14B | Brainstorming / Insight Extraction |
 | General | Translator | GPU1 | 7B | Multi-language Translation |
-| General | Visual Analyzer | GPU1 | VL-7B | Image Analysis (Multimodal) |
+| General | Visual Analyzer | GPU1 | VL-7B | Image Analysis (Multimodal) — see note |
 | Development | Coach | GPU0 | 14B | Requirements / Dev Team Orchestration |
 | Development | Designer | GPU0 | 14B | Design System / Multi-page Mockups |
 | Development | Developer | GPU0 | 14B | Code Implementation |
 | Development | Inspector | GPU2 | 7B | Architecture Review / Code Audit |
 | Development | Tester | GPU2 | 7B | Type Checking / Linting / Unit Tests |
 | Development | Deployer | GPU2 | 7B | Build / Deploy / Rollback |
+| Development | Handoff Receiver | GPU0 | 14B | Existing-project Takeover / Impact Assessment |
 | Operations | Cleaner | GPU2 | 7B | File System Cleanup |
+| Management | HR Manager | GPU2 | 7B | Role Audit / Prompt Optimization |
+| Management | Experience Evaluator | GPU2 | 7B | Experience Scoring / Memory Pruning |
+| Core | Secretary *(always-on)* | GPU0 | 14B | Turn Recording / Experience Injection / Summarization |
 
-### 9 Preset Workgroups
+> **Note on Visual Analyzer**: multimodal analysis requires the Qwen2.5-VL-7B weights, which are only loaded in the multi-GPU configuration. On the single-GPU deployment the role remains dispatchable and answers as a text role, but true image understanding is unavailable — the backend prints an explicit degradation warning at startup rather than failing silently.
+
+### 10 Preset Workgroups
 
 | Workgroup | Trigger Keywords | Pipeline |
 |-----------|-----------------|----------|
-| `dev_full` | "develop", "build", "create" | Coach → Designer → Developer → Inspector → Tester → Cleaner |
-| `report_writing` | "write report", "draft article" | Writer → Quality Checker |
-| `research_investigation` | "research", "investigate" | Knowledge Retriever → Writer → Quality Checker |
-| `dev_code_review` | "review", "audit code" | Inspector |
-| `dev_design_only` | "design", "UI", "mockup" | Coach → Designer |
-| `dev_tech_debt` | "tech debt", "refactor" | Inspector → Cleaner |
-| `translation_task` | "translate" | Translator → Quality Checker |
-| `schedule_planning` | "schedule", "reminder" | Scheduler |
+| `dev_full` | "develop", "build", "create" | Coach → Designer → Coach → Developer → Inspector → Tester → Deployer → Cleaner |
+| `dev_modification` | existing project + change request | Handoff Receiver → Inspector → Designer → Developer → Inspector → Tester → Deployer → Cleaner |
+| `report_writing` | "write report", "draft article" | Knowledge Retriever → Writer → Quality Checker → Writer |
+| `research_investigation` | "research", "investigate" | Knowledge Retriever → Creative → Quality Checker |
+| `dev_code_review` | "review", "audit code" | Inspector → Developer → Tester → Cleaner |
+| `dev_design_only` | "design", "UI", "mockup" | Coach → Designer → Quality Checker |
+| `dev_tech_debt` | "tech debt", "refactor" | Inspector → Developer → Tester → Cleaner |
+| `translation_task` | "translate" | Translator → Quality Checker → Translator |
+| `schedule_planning` | "schedule", "reminder" | Scheduler → Creative → Quality Checker |
 | `visual_analysis_task` | "analyze image" | Visual Analyzer → Writer |
+
+Development pipelines additionally append an **Experience Evaluator** step at completion (dispatcher rule `experience_eval_hook`), which scores the experiences injected during the run and prunes stale memory.
 
 ---
 
@@ -99,7 +112,7 @@ Describe your needs in plain language, and the AI auto-generates a complete Agen
 No truncation — only semantic compression. Write-before-compress guarantee prevents data loss.
 
 ### 3. Dynamic Dispatch System
-Keyword/semantic matching + dynamic workgroup assembly. GPU-affinity-aware parallel scheduling across 3 GPU instances.
+Keyword/semantic matching + dynamic workgroup assembly. On the default single-GPU deployment roles execute sequentially on one llama-server; the same GPU-affinity metadata enables parallel scheduling across multiple GPUs when more than one card is available.
 
 ### 4. Project State Tracking
 Cross-session project awareness via `PROJECT_STATUS.md`. The Coach role maintains structured progress tracking, and the system auto-restores context after restart.
@@ -127,21 +140,44 @@ cmake --build . --config Release -j$(nproc)
 
 All matrix operations (attention, FFN, embedding) are offloaded to AMD GPU via HIPBLAS, achieving near-CUDA parity on Radeon hardware.
 
-### 2. Multi-GPU Parallel Inference
+### 2. Single-GPU Deployment (Default — as demonstrated)
 
-Three llama-server instances run on separate GPUs with `ROCR_VISIBLE_DEVICES` isolation:
+**The shipped configuration targets a single AMD GPU.** Our reference deployment — and everything shown in the demo video — runs on one **Radeon PRO W7900 (48GB, gfx1100, ROCm 7.2)** on a Radeon Cloud instance, serving all 19 roles from a single `llama-server`:
 
 ```bash
-ROCR_VISIBLE_DEVICES=0 ./llama-server -m qwen2.5-14b-q4_k_m.gguf --port 8000
-ROCR_VISIBLE_DEVICES=1 ./llama-server -m qwen2.5-7b-q4_k_m.gguf --port 8001
-ROCR_VISIBLE_DEVICES=2 ./llama-server -m qwen2.5-7b-q4_k_m.gguf --port 8002
+# Started by setup_amd_cloud.sh — one server, one GPU, all roles
+./llama-server -m qwen2.5-14b-instruct-q4_k_m.gguf \
+    -a Qwen2.5-14B-Instruct --port 8000 \
+    -ngl 99 --ctx-size 8192 --parallel 1
 ```
 
-Roles are assigned GPU affinity based on task complexity — 14B for heavy reasoning, 7B for lightweight checks.
+`SINGLE_GPU_MODE=true` is the **default** (`backend/config/settings.py`), and `setup_amd_cloud.sh` additionally pins it in `backend/.env`. All roles resolve to the same endpoint through one function — `settings.resolve_inference_url()` — regardless of their declared GPU affinity. No environment variable needs to be set by hand; the backend prints its resolved routing on startup so it can be verified at a glance:
 
-### 3. Single GPU Mode
+```
+[RoleLoader] 推理路由: 单 GPU 模式 (SINGLE_GPU_MODE=true) — 全部角色 → http://localhost:8000/v1
+```
 
-For environments with only one AMD GPU (e.g., cloud instances), `single_gpu_mode=true` routes all 15 roles to a single llama-server instance, sharing the GPU sequentially.
+**Fitting 19 roles onto one 48GB card** is what makes this work:
+
+- **Q4_K_M quantization**: 14B weights occupy ~9GB instead of ~28GB at FP16
+- **GQA-aware KV budgeting**: Qwen2.5-14B uses only 8 KV heads, so KV cache costs ~0.1875 MiB/token — even a 32K context stays under ~18GB total
+- **Sequential role execution**: roles share the GPU in turn rather than competing for VRAM, so peak usage is bounded by a single active context
+- **Full offload** (`-ngl 99`): every layer lives on the Radeon GPU; no CPU fallback path
+
+### 3. Multi-GPU Affinity (Optional Scale-Out)
+
+Every role carries a `gpu_affinity` tag (`gpu0`/`gpu1`/`gpu2`) in `data/role_pool.json`, assigned by task weight — 14B for heavy reasoning (Coach, Designer, Developer), 7B for lightweight checks (Inspector, Tester, Cleaner). On a single card these tags are simply ignored; on a multi-GPU host they become a scale-out plan that requires no code change:
+
+```bash
+# Opt in explicitly — you must start all three servers yourself
+sed -i 's|^SINGLE_GPU_MODE=.*|SINGLE_GPU_MODE=false|' backend/.env
+
+ROCR_VISIBLE_DEVICES=0 ./llama-server -m qwen2.5-14b-q4_k_m.gguf --port 8000
+ROCR_VISIBLE_DEVICES=1 ./llama-server -m qwen2.5-7b-q4_k_m.gguf  --port 8001
+ROCR_VISIBLE_DEVICES=2 ./llama-server -m qwen2.5-7b-q4_k_m.gguf  --port 8002
+```
+
+The dispatcher then executes roles on different GPUs in parallel while serializing same-GPU roles. This path is **designed and implemented but not part of the demonstrated deployment** — the hardware we deployed on has one GPU.
 
 ### 4. Memory Optimization
 
@@ -171,11 +207,13 @@ When llama.cpp is unavailable, the gateway reports `mode = "none"` and inference
 
 ### Models Used
 
-| Model | Size | Quantization | GPU | Purpose |
-|-------|------|-------------|-----|---------|
-| Qwen2.5-14B-Instruct | 14B | GGUF Q4_K_M | GPU0 | Primary reasoning, code generation |
-| Qwen2.5-7B-Instruct | 7B | GGUF Q4_K_M | GPU1/GPU2 | Secondary reasoning, lightweight tasks |
-| Qwen2.5-VL-7B-Instruct | 7B | GGUF | GPU1 | Multimodal vision analysis |
+| Model | Size | Quantization | Loaded in default (single-GPU) deploy | Purpose |
+|-------|------|-------------|:---:|---------|
+| Qwen2.5-14B-Instruct | 14B | GGUF Q4_K_M | **Yes** — serves all 19 roles | Primary reasoning, code generation |
+| Qwen2.5-7B-Instruct | 7B | GGUF Q4_K_M | No — multi-GPU only (`gpu1`/`gpu2`) | Secondary reasoning, lightweight tasks |
+| Qwen2.5-VL-7B-Instruct | 7B | GGUF | No — multi-GPU only (`gpu1`) | Multimodal vision analysis |
+
+On the reference W7900 deployment a single Qwen2.5-14B-Instruct Q4_K_M instance backs the entire role system. The 7B and VL entries are part of the multi-GPU scale-out plan and are not loaded in the demonstrated configuration.
 
 ### Why llama.cpp + ROCm?
 
@@ -185,6 +223,8 @@ When llama.cpp is unavailable, the gateway reports `mode = "none"` and inference
 - **ROCm HIPBLAS backend**: Full AMD GPU acceleration through native HIP kernels
 
 ### Deployment Architecture
+
+**Default — single GPU (this is what the demo video shows):**
 
 ```
                     +----------+
@@ -197,18 +237,33 @@ When llama.cpp is unavailable, the gateway reports `mode = "none"` and inference
     |  FastAPI:8080  |     |  Frontend Dist  |
     +-------+--------+     +-----------------+
             |
-   +--------+--------+--------+
-   |        |        |        |
-+--v--+ +--v--+ +--v--+      |
-|GPU0 | |GPU1 | |GPU2 |      |
-|14B  | |7B+VL| |7B   |      |
-|:8000| |:8001| |:8002|      |
-+-----+ +-----+ +-----+      |
-                             |
-                    +--------v--------+
-                    |  Cloud API       |
-                    |  Fallback Only   |
-                    +-----------------+
+            |  settings.resolve_inference_url()
+            |  SINGLE_GPU_MODE=true -> all 19 roles
+            |
+     +------v-------------------+
+     |  llama-server  :8000     |
+     |  Qwen2.5-14B Q4_K_M      |
+     |  Radeon PRO W7900 / 48GB |
+     +--------------------------+
+
+     No other inference path exists. There is no cloud
+     endpoint, no fallback, and no API-key field to fill.
+```
+
+**Optional — multi-GPU scale-out (`SINGLE_GPU_MODE=false`):**
+
+```
+    +-------+--------+
+    |  FastAPI:8080  |
+    +-------+--------+
+            |  routed by role gpu_affinity
+   +--------+--------+
+   |        |        |
++--v--+ +--v--+ +--v--+
+|GPU0 | |GPU1 | |GPU2 |
+|14B  | |7B+VL| |7B   |
+|:8000| |:8001| |:8002|
++-----+ +-----+ +-----+
 ```
 
 ---
@@ -219,8 +274,8 @@ When llama.cpp is unavailable, the gateway reports `mode = "none"` and inference
 
 | Item | Requirement |
 |------|-------------|
-| GPU | AMD Radeon with ROCm 6.x+ support |
-| VRAM | ≥ 48GB (3-GPU); ≥ 16GB (single GPU mode) |
+| GPU | AMD Radeon with ROCm 6.x+ support — **1 GPU is sufficient** (reference: Radeon PRO W7900) |
+| VRAM | ≥ 16GB for 14B Q4_K_M @ 8K context; 48GB (reference card) comfortably allows 32K context |
 | RAM | ≥ 64GB |
 | Storage | ≥ 100GB SSD |
 | OS | Ubuntu 22.04 LTS |

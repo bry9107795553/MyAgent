@@ -361,24 +361,20 @@ class RoleBase(ABC):
         """
         根据 GPU 亲和性获取对应的 LLM 服务 URL
 
-        GPU 分配:
-            gpu0: http://localhost:8000/v1 (14B 文本)
-            gpu1: http://localhost:8001/v1 (7B 文本 + 视觉)
-            gpu2: http://localhost:8002/v1 (7B 文本)
+        实际解析逻辑收敛在 `settings.resolve_inference_url()`，
+        本方法只是角色侧的薄封装 —— 端口不再在这里硬编码。
 
-        单 GPU 模式 (settings.single_gpu_mode=True):
-            所有角色共享 http://localhost:8000/v1
+        单 GPU 模式 (默认, SINGLE_GPU_MODE=true):
+            无视 gpu_affinity，所有角色 → settings.llama_base_url
+            (默认 http://localhost:8000/v1，随 LLAMA_BASE_URL 变动)
+
+        多 GPU 模式 (SINGLE_GPU_MODE=false):
+            gpu0 → :8000 (14B 文本)
+            gpu1 → :8001 (7B 文本 + 视觉)
+            gpu2 → :8002 (7B 文本)
         """
         from config.settings import settings
-        if settings.single_gpu_mode:
-            return "http://localhost:8000/v1"
-
-        gpu_ports = {
-            "gpu0": "http://localhost:8000/v1",
-            "gpu1": "http://localhost:8001/v1",
-            "gpu2": "http://localhost:8002/v1",
-        }
-        return gpu_ports.get(self.gpu_affinity, "http://localhost:8000/v1")
+        return settings.resolve_inference_url(self.gpu_affinity)
 
     # ------------------------------------------------------------------ #
     # 记忆记录
@@ -420,6 +416,8 @@ class RoleBase(ABC):
             "group": self.group,
             "model_type": self.model_type,
             "gpu_affinity": self.gpu_affinity,
+            # 实际生效的推理端点（单卡模式下所有角色都应是同一个）
+            "inference_url": self._get_gpu_url(),
             "capabilities": self.capabilities,
             "session_id": self._session_id,
             "memory": {

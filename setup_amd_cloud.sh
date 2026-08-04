@@ -99,6 +99,16 @@ AMDGPU_TARGET="${AMDGPU_TARGET:-gfx1100}"
 LLAMA_PORT="${LLAMA_PORT:-8000}"
 BACKEND_PORT="${BACKEND_PORT:-8080}"
 
+# ---- GPU 路由模式 ----
+# 本脚本只起 **一个** llama-server (端口 $LLAMA_PORT)，因此必须是单 GPU 路由。
+# 若默认走多 GPU 路由，gpu_affinity=gpu1/gpu2 的角色会去连 8001/8002 ——
+# 那里没有服务，部署阶段一切正常，跑到多角色流水线中途才会 Connection refused。
+#
+# 注意：这里**不能**用 `export SINGLE_GPU_MODE=true` 解决。
+# 后端是稍后由 start.sh 在另一个 shell 里拉起的，export 不会传递过去。
+# 正确做法是落盘到 backend/.env（Settings 的 env_file），见 Step 9。
+SINGLE_GPU_MODE="${SINGLE_GPU_MODE:-true}"
+
 # 模型别名（必须与 backend/config/models.yaml 的 model_name 一致）
 MODEL_ALIAS="Qwen2.5-14B-Instruct"
 
@@ -154,7 +164,14 @@ echo "  并发槽位   : $PARALLEL  (每槽 $CTX_PER_SLOT tokens)"
 echo "  KV cache   : ~${KV_MIB} MiB"
 echo "  GPU 架构   : $AMDGPU_TARGET"
 echo "  模型路径   : $MODEL_FILE"
+echo "  GPU 路由   : SINGLE_GPU_MODE=$SINGLE_GPU_MODE (单卡=全部角色走 :$LLAMA_PORT)"
 echo "============================================"
+
+if [ "$SINGLE_GPU_MODE" != "true" ]; then
+    warn "SINGLE_GPU_MODE=$SINGLE_GPU_MODE —— 本脚本只会启动 1 个 llama-server。"
+    warn "多 GPU 路由需要你自行起满 8000/8001/8002 三个实例，否则"
+    warn "gpu_affinity=gpu1/gpu2 的角色一调用就会 Connection refused。"
+fi
 
 if [ "$CTX_PER_SLOT" -lt 4096 ]; then
     warn "每槽上下文只有 $CTX_PER_SLOT tokens，低于 4096。"
@@ -367,9 +384,38 @@ fi
 # ============================================================
 # Step 9: 生成启动脚本
 # ============================================================
-step "9/9" "生成启动脚本"
+step "9/9" "生成运行时配置与启动脚本"
 
 cd "$PROJECT_DIR"
+
+# ---- backend/.env：把 GPU 路由固化到磁盘 ----
+# 为什么必须落盘而不是 export：
+#   后端由 start.sh 在**另一个 shell** 中用 uvicorn 拉起，
+#   本脚本 export 的环境变量到不了那个进程。
+#   backend/.env 是 pydantic Settings 的 env_file，start.sh 里
+#   `cd $BACKEND_DIR` 之后一定会被读到，跨 shell、跨重启都生效。
+# 幂等：只覆写下面这几个 key，用户手写的其它配置原样保留。
+ENV_FILE="$PROJECT_DIR/backend/.env"
+touch "$ENV_FILE"
+
+set_env_kv() {
+    local key="$1" val="$2"
+    if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
+        # 用 | 作分隔符，避免 URL 里的 / 打架
+        sed -i "s|^${key}=.*|${key}=${val}|" "$ENV_FILE"
+    else
+        echo "${key}=${val}" >> "$ENV_FILE"
+    fi
+}
+
+set_env_kv "SINGLE_GPU_MODE" "$SINGLE_GPU_MODE"
+set_env_kv "LLAMA_BASE_URL"  "http://localhost:${LLAMA_PORT}/v1"
+set_env_kv "LLAMA_MODEL"     "$MODEL_ALIAS"
+
+echo "  ✓ backend/.env 已写入 (GPU 路由固化)"
+echo "      SINGLE_GPU_MODE=$SINGLE_GPU_MODE"
+echo "      LLAMA_BASE_URL=http://localhost:${LLAMA_PORT}/v1"
+echo "      LLAMA_MODEL=$MODEL_ALIAS"
 
 # ---- llama-server 启动脚本（参数从本脚本注入，保持一致）----
 # 先写入注入的默认值（可被环境变量覆盖），再追加固定的逻辑体。
@@ -495,6 +541,14 @@ echo ""
 echo "============================================"
 echo "  部署完成！"
 echo "============================================"
+echo ""
+echo "  GPU 路由: 单卡模式（默认，无需手动设任何环境变量）"
+echo "    全部 18 个角色 → http://localhost:$LLAMA_PORT/v1"
+echo "    已固化在 backend/.env，start.sh 会自动读取。"
+echo "    后端启动日志里会打印一行 '[RoleLoader] 推理路由: ...'，可肉眼核对。"
+echo ""
+echo "    换多卡实例时（需自行起满 8000/8001/8002 三个 llama-server）:"
+echo "      sed -i 's|^SINGLE_GPU_MODE=.*|SINGLE_GPU_MODE=false|' backend/.env"
 echo ""
 echo "  启动:"
 echo "    cd $PROJECT_DIR && bash start.sh"

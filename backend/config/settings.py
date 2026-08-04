@@ -81,6 +81,20 @@ SKINS_DIR = DATA_DIR / "skins"
 TEMPLATES_DIR = DATA_DIR / "templates"
 
 
+# ===== 多 GPU 端点表 =====
+#
+# 仅在 single_gpu_mode=False 时生效。三张卡各起一个 llama-server：
+#   gpu0 → :8000  14B 文本 (重活)
+#   gpu1 → :8001  7B 文本 + VL 视觉
+#   gpu2 → :8002  7B 文本 (轻活)
+# 全部为本机端口，仍然受 assert_local_endpoint() 约束。
+MULTI_GPU_ENDPOINTS: dict[str, str] = {
+    "gpu0": "http://localhost:8000/v1",
+    "gpu1": "http://localhost:8001/v1",
+    "gpu2": "http://localhost:8002/v1",
+}
+
+
 # ===== Settings 类 =====
 
 class Settings(BaseSettings):
@@ -119,9 +133,26 @@ class Settings(BaseSettings):
     # 依据赛道规则「核心推理不允许使用远程 API」，整条降级通道已从
     # settings / gateway / models.yaml / 部署脚本中彻底删除，不保留开关。
 
-    # 单 GPU 模式 (云环境 AMD 实例只有一张 GPU)
-    # 设为 true 时，所有角色的 GPU 路由都指向同一个端口 8000
-    single_gpu_mode: bool = False
+    # ===== GPU 路由模式 =====
+    #
+    # 默认 True —— 「默认即正确」。
+    #
+    # 本项目的实际交付环境是 Radeon Cloud 单卡实例
+    # (AMD Radeon PRO W7900 / 48GB / gfx1100)，只会起 **一个** llama-server
+    # (端口 8000)。若默认走多 GPU 路由，凡是 gpu_affinity=gpu1/gpu2 的角色
+    # 都会去连 8001/8002 —— 那里没有服务，部署阶段一切正常，跑到多角色
+    # 流水线中途才会 Connection refused。这类「部署成功、演示炸场」的坑
+    # 必须靠默认值堵死，而不是靠部署者记得设环境变量。
+    #
+    # 单 GPU 模式 (默认, single_gpu_mode=True):
+    #     所有角色共享 llama_base_url 这一个端点。
+    #
+    # 多 GPU 模式 (显式关闭):
+    #     SINGLE_GPU_MODE=false        # 环境变量
+    #     或 backend/.env 里写 SINGLE_GPU_MODE=false
+    #     此时按 MULTI_GPU_ENDPOINTS 表按 gpu_affinity 分流，
+    #     需要自行起满 8000/8001/8002 三个 llama-server。
+    single_gpu_mode: bool = True
 
     # 兼容旧字段名 (vllm_* → llama_*，保留别名以兼容已有调用方)
     @property
@@ -153,6 +184,39 @@ class Settings(BaseSettings):
 
     # 前端静态文件目录
     frontend_dist: str = str(PROJECT_ROOT / "frontend" / "dist")
+
+    # ------------------------------------------------------------------ #
+    # 推理端点路由 (全系统唯一入口)
+    # ------------------------------------------------------------------ #
+
+    def resolve_inference_url(self, gpu_affinity: str = "gpu0") -> str:
+        """
+        按角色的 GPU 亲和性解析推理端点。
+
+        这是**全系统唯一**的端点路由入口 —— role_base 不再各自硬编码端口，
+        避免「改了 LLAMA_PORT，单卡模式还往 8000 打」这类不一致。
+
+        单 GPU 模式 (默认):
+            无视 gpu_affinity，一律返回 llama_base_url。
+            改 LLAMA_BASE_URL 即可整体换端口，路由自动跟随。
+
+        多 GPU 模式 (SINGLE_GPU_MODE=false):
+            按 MULTI_GPU_ENDPOINTS 分流；未知亲和性回落到 llama_base_url。
+
+        :param gpu_affinity: "gpu0" / "gpu1" / "gpu2"
+        :return: OpenAI 兼容端点 URL (始终为本机地址)
+        """
+        if self.single_gpu_mode:
+            return self.llama_base_url
+        return MULTI_GPU_ENDPOINTS.get(gpu_affinity, self.llama_base_url)
+
+    def describe_gpu_routing(self) -> str:
+        """一行式路由摘要，供启动日志打印（上机时肉眼可核对）"""
+        if self.single_gpu_mode:
+            return (f"单 GPU 模式 (SINGLE_GPU_MODE=true) — "
+                    f"全部角色 → {self.llama_base_url}")
+        eps = " | ".join(f"{k}→{v}" for k, v in MULTI_GPU_ENDPOINTS.items())
+        return f"多 GPU 模式 (SINGLE_GPU_MODE=false) — {eps}"
 
 
 # 全局配置单例

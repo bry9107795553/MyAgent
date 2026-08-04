@@ -207,5 +207,14 @@
   "model_requirements": {
     "text": "Qwen2.5-14B 或 Qwen2.5-7B（按GPU亲和性分配）",
     "vision": "Qwen2.5-VL-7B（多模态模型，必须部署在GPU1）"
+  },
+  "single_gpu_fallback": {
+    "note": "上面的 gpu_allocation / model_requirements 描述的是【多GPU模式】的设计意图，仅在 SINGLE_GPU_MODE=false 时生效。默认交付环境是单卡 Radeon PRO W7900（48GB），SINGLE_GPU_MODE 默认为 true。",
+    "default_mode": "single_gpu",
+    "routing": "single_gpu_mode=true 时 settings.resolve_inference_url() 无视 gpu_affinity，全部 18 个角色统一路由到 llama_base_url（默认 http://localhost:8000/v1）。gpu1/gpu2 的角色不会去连 8001/8002。",
+    "model_field_is_metadata_only": "角色的 model 字段（text/vision）只用于展示与调度规划，不会作为 model 名传给 llama-server —— gateway._get_model_name() 恒定返回 settings.llama_model。因此单卡上加载 14B 时，标注 vision 的角色不会因模型名不存在而报 400。",
+    "degraded_roles": {
+      "visual_analyzer": "单卡模式下未加载 Qwen2.5-VL-7B，该角色仍可正常路由与文本对话，但真实的图像理解能力不可用。启动日志会打印降级告警。"
+    }
   }
 }

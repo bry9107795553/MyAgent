@@ -542,7 +542,40 @@ class RoleLoader:
         print(f"[RoleLoader] 已加载 {len(self._roles)} 个角色 "
               f"(含主控 + {len(self._roles) - 1} 个角色)")
 
+        # 6. 打印 GPU 路由摘要 + 单卡降级提示（上机时肉眼可核对）
+        self._report_gpu_routing()
+
         return self._master
+
+    def _report_gpu_routing(self):
+        """
+        启动时打印推理端点路由，并对单 GPU 模式下的能力降级给出明确告警。
+
+        为什么要打印：单卡/多卡配错时，部署阶段完全正常，
+        要等到多角色流水线跑到 gpu1/gpu2 角色才会 Connection refused。
+        把路由摊在启动日志里，5 秒就能自查，不用等演示炸场。
+        """
+        from config.settings import settings
+
+        print(f"[RoleLoader] 推理路由: {settings.describe_gpu_routing()}")
+
+        if not settings.single_gpu_mode:
+            # 多 GPU 模式：提醒必须起满三个 llama-server
+            print("[RoleLoader] ⚠ 多 GPU 模式已启用 —— "
+                  "请确认 8000/8001/8002 三个 llama-server 均已就绪，"
+                  "否则 gpu1/gpu2 角色会连接失败。")
+            return
+
+        # 单 GPU 模式：只加载了一个文本模型，非 text 角色能力降级
+        degraded = [
+            r.id for r in self._roles.values()
+            if getattr(r, "model_type", "text") != "text"
+        ]
+        if degraded:
+            print(f"[RoleLoader] ⚠ 单 GPU 模式下未加载专用模型的角色: "
+                  f"{', '.join(degraded)} —— "
+                  f"这些角色仍可路由与对话（走 {settings.llama_model}），"
+                  f"但对应的专用能力（如视觉理解）不可用。")
 
     def load_role(self, role_id: str, session_id: str = "") -> Optional[RoleBase]:
         """

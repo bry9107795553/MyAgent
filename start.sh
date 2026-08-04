@@ -41,6 +41,25 @@ echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  MyAgent 启动${NC}"
 echo -e "${BLUE}========================================${NC}"
 
+# ===== 0. GPU 路由预检 =====
+# 本脚本只启动 1 个 llama-server (:8000)。若后端跑在多 GPU 路由下，
+# gpu_affinity=gpu1/gpu2 的角色会去连 8001/8002 —— 那里没有服务，
+# 部署阶段看不出问题，跑到多角色流水线中途才炸。这里提前拦。
+ENV_FILE="$BACKEND_DIR/.env"
+SINGLE_GPU_MODE="$(grep -s '^SINGLE_GPU_MODE=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:space:]')"
+# 未在 .env 中显式配置时，采用 settings.py 的默认值 true（默认即正确）
+SINGLE_GPU_MODE="${SINGLE_GPU_MODE:-true}"
+
+echo ""
+if [ "$SINGLE_GPU_MODE" = "true" ]; then
+    echo -e "${GREEN}[0/3]${NC} GPU 路由: 单卡模式 — 全部角色 → http://localhost:8000/v1"
+else
+    echo -e "${YELLOW}[0/3]${NC} GPU 路由: 多卡模式 (SINGLE_GPU_MODE=$SINGLE_GPU_MODE)"
+    echo -e "  ${YELLOW}⚠${NC} 本脚本只会启动 :8000 这一个 llama-server。"
+    echo -e "  ${YELLOW}⚠${NC} 请自行确保 :8001 / :8002 也已就绪，否则 gpu1/gpu2 角色必然连接失败。"
+    echo -e "  ${YELLOW}⚠${NC} 单卡实例请改回: sed -i 's|^SINGLE_GPU_MODE=.*|SINGLE_GPU_MODE=true|' backend/.env"
+fi
+
 # ===== 1. 启动 llama.cpp 推理引擎 =====
 echo ""
 echo -e "${YELLOW}[1/3] 启动 llama.cpp (llama-server)...${NC}"
