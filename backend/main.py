@@ -21,7 +21,10 @@ from core.agent.registry import agent_registry
 from core.role.loader import role_loader
 from core.bus import message_bus
 
-from api.routes import agent_routes, skin_routes, module_routes, layout_routes, workgroup_routes, project_routes
+from api.routes import (
+    agent_routes, skin_routes, module_routes, layout_routes,
+    workgroup_routes, project_routes, model_routes, artifact_routes,
+)
 
 
 @asynccontextmanager
@@ -31,9 +34,9 @@ async def lifespan(app: FastAPI):
     print(f"  {settings.app_name} 启动中...")
     print("=" * 60)
 
-    # 1. 初始化 LLM 网关 (连接 llama.cpp)
-    print("\n[1/4] 初始化 LLM 网关...")
-    await llm_gateway.init()
+    # 1. 初始化 LLM 网关 (后台连接，不阻塞启动)
+    print("\n[1/4] 初始化 LLM 网关 (后台)...")
+    asyncio.create_task(llm_gateway.init())
 
     # 2. 初始化 Agent 注册表 (扫描目录 + 启动 watchdog)
     print("\n[2/4] 初始化 Agent 注册表...")
@@ -102,6 +105,8 @@ app.include_router(module_routes.router)
 app.include_router(layout_routes.router)
 app.include_router(workgroup_routes.router)
 app.include_router(project_routes.router)
+app.include_router(model_routes.router)
+app.include_router(artifact_routes.router)
 
 
 # 健康检查
@@ -110,6 +115,7 @@ async def health():
     return {
         "status": "ok",
         "llm_available": llm_gateway.available,
+        "current_model": llm_gateway.get_current_model(),
         "agents": agent_registry.list_agents(),
     }
 

@@ -10,14 +10,11 @@ RoleLoader — 角色加载器
 角色类型映射:
     master            → MasterRole (主控，特殊调度逻辑)
     hr_manager        → HrManagerRole (人事管理)
-    handoff_receiver  → GenericRole (通用角色，按 role_id 匹配精调提示词)
     其他              → GenericRole (通用角色，按 role_id 匹配精调提示词)
 
 提示词管理:
-    三级加载策略 (优先级从高到低):
-        1. roles/{role_id}/prompt.txt 文件 — 推荐，集中管理，便于修改
-        2. PROMPTS 字典 — 兼容旧版，逐步迁移到文件
-        3. _build_default_prompt() — 根据角色定义自动生成基础提示词（兜底）
+    精调提示词集中在 PROMPTS 字典中，按 role_id 索引。
+    未匹配的角色使用 _build_default_prompt() 自动生成基础提示词。
 
 使用方式:
     loader = RoleLoader()
@@ -42,10 +39,6 @@ ROLE_POOL_PATH = (
 
 
 # ===== 精调提示词 =====
-# 注意: 自 2026-08-01 起，提示词优先从 roles/{role_id}/prompt.txt 加载。
-# PROMPTS 字典仅作为兼容性回退，新角色应使用 prompt.txt 文件。
-# 已迁移到 prompt.txt 的角色: 全部 17 个角色
-# 剩余仅在此字典中的角色: 无
 
 PROMPTS: dict[str, str] = {
     # ── 教练 ──
@@ -237,74 +230,7 @@ PROMPTS: dict[str, str] = {
 - fact_checker: 事实核查工具
 - logic_analyzer: 逻辑分析器
 - quality_rules: 质量规则引擎""",
-
-    # ── 项目接手员 ──
-    "handoff_receiver": """# 身份 (Identity)
-你是「项目接手员」—— MyAgent 的第 16 个角色。你只接已有项目——教练从零建完的、别人写的、半拉子工程、烂尾项目，都是你的活。
-你跟教练平行，同样调动 5 人执行团队。但你和教练的区别：教练负责"从零创造"，你负责"在已有的基础上精确修改"。
-核心思维：先读再动——面对任何修改请求，第一反应不是"怎么做"，而是"现在是什么样"。
-
-# 职责 (Responsibilities)
-1. 接收移交：从教练处接收项目移交摘要，理解项目现状和用户修改需求
-2. 理解现状：先读项目结构文件（package.json、目录结构、README、.architecture.md），再派巡检员扫描目标模块
-3. 范围确认：消化巡检报告后，用自己的话告诉用户改动影响面，确认后再动
-4. 判断路径：UI改动先派设计员出样图 → 纯逻辑直接派开发员 → 架构变更先出方案
-5. 执行修改：派开发员改 → 巡检员只查改动过的文件 → 测试员验证 → 部署员发新版 → 清洁员清理
-6. Backlog追踪：维护 BACKLOG.md，记录功能请求和 bug，按优先级排序
-
-# 边界 (Boundaries)
-- 你不教学（除非用户主动问，用大白话简单解释）
-- 你不做竞品调研（项目已经有了，调研是教练的事）
-- 你不重新规划整个项目架构（做最小侵入的修改，不是推倒重来）
-- 你不自己上手改代码——你没有调试工具，只有派单权
-- 止损规则：同一个问题 2 次失败 → 必须停，复盘后出方案让用户选
-
-# 角色隔离铁律
-- 部署出问题 → 派给部署员
-- 构建报错 → 派给测试员/开发员
-- 端口/nginx/环境变量 → 部署员的事
-- 你没有调试工具，只有派单权
-
-# 输出 (Output)
-- 接手确认：标注 [接手员]，确认收到移交，说明改动范围，预告扫描步骤
-- 影响面确认：巡检扫描结果（消化后输出，不扔原始报告），请用户确认
-- 修改完成：改动文件清单、测试结果、部署状态
-- 止损报告：失败 2 次后输出根因分析和备选方案
-
-# 标准 (Standards)
-- 先读再动：每次修改前必读项目结构 + 巡检扫描
-- 最小侵入：只改需要改的，不顺手重构
-- 用户确认：影响面确认后再动，架构变更先出方案
-- 止损：2 次失败即停，不自作主张换方案
-- 可追溯：每次修改记录在 BACKLOG.md 和 changelog
-
-# 记忆 (Memory)
-- 你可以访问项目档案（移交摘要、架构决策、改动历史）
-- 你可以查询用户偏好（沟通风格、技术偏好）
-- 你可以通过黑板接收主控下发的修改任务
-- 重点关注：项目结构、巡检历史、BACKLOG.md
-
-# 工具 (Tools)
-- dispatch_tools: 通过主控向设计师/开发员/巡检员/测试员/部署员/清洁员派发任务
-- inspector_scan: 派巡检员扫描目标模块，获取代码结构和依赖关系
-- debt_tracker: 技术债追踪
-- backlog_manager: 维护 BACKLOG.md，记录功能请求和 bug""",
 }
-
-
-# ===== 提示词文件路径 =====
-
-PROMPT_FILE_DIR = (
-    Path(__file__).resolve().parent.parent / "agent" / "roles"
-)
-
-
-def _load_prompt_file(role_id: str) -> Optional[str]:
-    """读取角色的 prompt.txt 文件"""
-    prompt_file = PROMPT_FILE_DIR / role_id / "prompt.txt"
-    if prompt_file.exists():
-        return prompt_file.read_text(encoding="utf-8")
-    return None
 
 
 # ===== 通用角色 =====
@@ -313,22 +239,15 @@ class GenericRole(RoleBase):
     """
     通用角色 — 标准角色实现
 
-    提示词策略 (优先级从高到低):
-        1. 读取 roles/{role_id}/prompt.txt 文件（推荐，集中管理）
-        2. 匹配 PROMPTS 字典中的精调提示词（兼容旧版）
-        3. 自动生成 7 段式基础提示词（兜底）
+    提示词策略:
+        1. 优先匹配 PROMPTS 字典中的精调提示词
+        2. 未匹配则自动生成 7 段式基础提示词
     """
 
     def _build_system_prompt(self) -> str:
         """根据 role_id 返回精调或自动生成的提示词"""
-        # 1. 优先读 prompt.txt 文件
-        prompt = _load_prompt_file(self.id)
-        if prompt:
-            return prompt
-        # 2. 回退到 PROMPTS 字典
         if self.id in PROMPTS:
             return PROMPTS[self.id]
-        # 3. 最后自动生成
         return self._build_default_prompt()
 
     def _build_default_prompt(self) -> str:
@@ -379,18 +298,13 @@ class HrManagerRole(RoleBase):
 
     职责:
         1. 角色审计：查看角色定义、提示词、表现
-        2. 角色编辑：修改角色提示词
+        2. 角色编辑：修改角色提示词（PROMPTS 字典）
         3. 角色新增/删除：修改 role_pool.json
         4. 对话导出：提取指定角色的完整对话用于分析
         5. 表现分析：分析对话记录，识别问题模式
     """
 
     def _build_system_prompt(self) -> str:
-        # 优先读 prompt.txt 文件
-        prompt = _load_prompt_file(self.id)
-        if prompt:
-            return prompt
-        # 回退到硬编码提示词
         return """# 身份 (Identity)
 你是「人事经理」—— MyAgent 的角色管理者。你负责维护所有角色的定义、提示词和表现评估。
 你像一位 HR 总监，确保团队每个成员（角色）都在最佳状态，持续优化他们的工作方式。
@@ -579,14 +493,11 @@ class RoleLoader:
     # ------------------------------------------------------------------ #
 
     def get_prompt(self, role_id: str) -> Optional[str]:
-        """获取角色当前提示词 (优先读 prompt.txt → PROMPTS 字典)"""
+        """获取角色当前提示词"""
         role = self._roles.get(role_id)
         if role:
             return role.system_prompt
-        # 角色未加载时，尝试读文件
-        prompt = _load_prompt_file(role_id)
-        if prompt:
-            return prompt
+        # 角色未加载时，从 PROMPTS 字典查找
         return PROMPTS.get(role_id)
 
     def update_prompt(self, role_id: str, new_prompt: str) -> bool:
@@ -693,7 +604,7 @@ class RoleLoader:
     def _save_role_pool(self):
         """保存角色池到文件"""
         self._role_pool_data["updated"] = "2026-08-01"
-        with open(ROLE_POOL_PATH, "w", encoding="utf-8") as f:
+        with open(ROLE_POOL_PATH, "w", encoding="utf-8-sig") as f:
             json.dump(self._role_pool_data, f, ensure_ascii=False, indent=2)
         print(f"[RoleLoader] 已保存角色池: {len(self._role_pool_data.get('roles', []))} 个角色")
 

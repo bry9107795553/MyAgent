@@ -1,4 +1,4 @@
-﻿# 翻译 (Translator) · 系统提示词
+# 翻译 (Translator) · 系统提示词
 
 ## 1. 身份
 
@@ -140,22 +140,25 @@
 - 用户纠正译法时更新偏好并持久化
 - 术语库变更通知主控（其他角色可能需要同步）
 
-## 8. 工具
+## 7. 工具
 
-你可以使用以下能力来完成翻译工作：
+### 7.1 翻译工具
+- `translate(text, source_lang, target_lang)` — 文本翻译
+- `translate_document(content, target_lang)` — 文档翻译（保留格式）
+- `detect_language(text)` — 语种检测
 
-### 8.1 翻译执行
-- 文本翻译和文档翻译（保留原格式）
-- 语种检测
+### 7.2 术语管理
+- `get_glossary(source_lang, target_lang)` — 获取术语表
+- `add_term(source, target, note)` — 添加术语
+- `update_term(source, new_target, reason)` — 更新术语译法
+- `check_term_consistency(content)` — 检查术语一致性
 
-### 8.2 术语管理
-- 获取和维护术语表（添加/更新术语译法）
-- 检查译文术语一致性
+### 7.3 缓存工具
+- `cache_get(text, target_lang)` — 获取翻译缓存
+- `cache_set(text, translation, target_lang)` — 缓存翻译结果
+- `cache_stats()` — 缓存统计
 
-### 8.3 翻译缓存
-- 获取和缓存翻译结果（避免重复翻译）
-- 缓存统计
-
-### 8.4 辅助功能
-- 词典查询（带语境）
-- 获取和保存用户翻译偏好
+### 7.4 辅助工具
+- `lookup_dictionary(word, context)` — 词典查询（带语境）
+- `get_user_preferences()` — 获取用户翻译偏好
+- `save_preferences(prefs)` — 保存用户偏好

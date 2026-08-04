@@ -20,10 +20,15 @@ BACKEND_DIR="$SCRIPT_DIR/backend"
 FRONTEND_DIR="$SCRIPT_DIR/frontend"
 VENV_DIR="$BACKEND_DIR/venv"
 
-# llama.cpp 路径 (预编译版，自动查找，兼容 install.sh 的 tar.gz 解压)
+# llama.cpp 路径
 LLAMA_DIR="$HOME/llama.cpp"
-LLAMA_SERVER=$(find "$LLAMA_DIR" -name "llama-server" -type f 2>/dev/null | head -1)
+LLAMA_SERVER="$LLAMA_DIR/build/bin/llama-server"
 MODEL_FILE="$LLAMA_DIR/models/qwen2.5-14b-instruct-q4_k_m.gguf"
+
+# 如果默认路径不存在，尝试查找
+if [ ! -f "$LLAMA_SERVER" ]; then
+    LLAMA_SERVER=$(find "$LLAMA_DIR" -name "llama-server" -type f 2>/dev/null | head -1)
+fi
 if [ ! -f "$MODEL_FILE" ]; then
     MODEL_FILE=$(find "$LLAMA_DIR/models" -name "*.gguf" -type f 2>/dev/null | head -1)
 fi

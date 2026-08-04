@@ -1,4 +1,4 @@
-# ===== Web 框架 =====
+﻿# ===== Web 框架 =====
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 python-multipart==0.0.9
@@ -21,13 +21,6 @@ watchdog==5.0.3
 # ===== 工具依赖 =====
 aiofiles==24.1.0        # 异步文件操作
 json5==0.9.25           # 宽松 JSON 解析 (LLM 输出容错)
-
-# ===== 向量检索 (RAG) =====
-chromadb==0.5.5
-
-# ===== 图片处理 (皮肤色彩分析) =====
-Pillow==10.4.0
-scikit-learn==1.5.2     # KMeans 色彩聚类
 
 # ===== 开发工具 =====
 python-dotenv==1.0.1

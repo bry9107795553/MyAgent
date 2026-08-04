@@ -44,16 +44,6 @@ class Settings(BaseSettings):
     llama_api_key: str = "EMPTY"                       # llama-server 不需要 key
     llama_timeout: int = 120
 
-    # 云端 API 降级配置 (本地 llama.cpp 不可用时自动切换)
-    cloud_api_base_url: str = "https://open.bigmodel.cn/api/paas/v4"
-    cloud_api_model: str = "glm-4-flash"
-    cloud_api_key: str = ""                             # 从环境变量 ZHIPU_API_KEY 读取
-    cloud_api_enabled: bool = True                      # 是否启用云端 API 降级
-
-    # 单 GPU 模式 (云环境 AMD 实例只有一张 GPU)
-    # 设为 true 时，所有角色的 GPU 路由都指向同一个端口 8000
-    single_gpu_mode: bool = False
-
     # 兼容旧字段名 (vllm_* → llama_*，保留别名以兼容已有调用方)
     @property
     def vllm_base_url(self) -> str:

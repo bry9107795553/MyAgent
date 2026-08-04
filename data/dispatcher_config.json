@@ -1,7 +1,7 @@
-﻿{
-  "version": "1.1",
+{
+  "version": "1.0",
   "updated": "2026-08-01",
-  "description": "调度器配置：预设工作组匹配规则 + 动态组装逻辑 + GPU分配策略 + 项目状态路由",
+  "description": "调度器配置：预设工作组匹配规则 + 动态组装逻辑 + GPU分配策略",
 
   "matching": {
     "strategy": "keyword_first_then_semantic",
@@ -35,14 +35,6 @@
         "example": "用户要'翻译这篇文档并检查质量' → 需要translation + fact_checking → 匹配translator + quality_checker"
       },
       {
-        "rule": "project_state_routing",
-        "description": "开发类任务根据项目状态分流：检查PROJECT_STATUS.md是否存在且状态为'已完成'/'Phase 3完成'，是则路由到handoff_receiver，否则路由到coach",
-        "trigger": "dev_group_tasks",
-        "status_check_path": "data/projects/{project_name}/PROJECT_STATUS.md",
-        "route_completed": "handoff_receiver → dev_modification 工作组",
-        "route_new": "coach → dev_full 工作组"
-      },
-      {
         "rule": "min_roles",
         "description": "能用单角色完成的任务不组装工作组，直接派单",
         "example": "用户要'翻译这段话' → 只需translator，不组装工作组"
@@ -69,7 +61,7 @@
       },
       {
         "rule": "coach_first",
-        "description": "开发类任务：新项目先派coach做需求发现，已有项目先派handoff_receiver做代码理解和影响面评估。由project_state_routing规则决定",
+        "description": "开发类任务先派coach做需求发现，coach产出PROJECT_PLAN后再调度执行",
         "trigger": "dev_group_tasks"
       }
     ],
@@ -105,11 +97,7 @@
       "build": "deployer",
       "deploy": "deployer",
       "garbage_scan": "cleaner",
-      "unused_file_detection": "cleaner",
-      "code_reading": "handoff_receiver",
-      "impact_assessment": "handoff_receiver",
-      "modification_dispatch": "handoff_receiver",
-      "backlog_tracking": "handoff_receiver"
+      "unused_file_detection": "cleaner"
     },
 
     "template_learning": {
@@ -143,9 +131,9 @@
     ],
 
     "parallel_matrix": {
-      "gpu0_roles": ["master", "coach", "writer", "creative", "designer", "developer", "handoff_receiver"],
+      "gpu0_roles": ["master", "coach", "writer", "creative", "designer", "developer"],
       "gpu1_roles": ["knowledge_retriever", "scheduler", "translator", "visual_analyzer"],
-      "gpu2_roles": ["quality_checker", "inspector", "tester", "deployer", "cleaner", "hr_manager"],
+      "gpu2_roles": ["quality_checker", "inspector", "tester", "deployer", "cleaner"],
       "max_parallel": 3,
       "description": "最多3个角色同时在不同GPU上并行执行"
     },
@@ -203,39 +191,7 @@
     ]
   },
 
-  
-  "role_activation_tiers": {
-    "description": "角色分级激活策略：按使用频率和系统负载分为三级，优化资源利用",
-    "version": "1.0",
-    "updated": "2026-08-01",
-
-    "tier_1_always_on": {
-      "description": "常驻角色：系统启动时加载，全程保持活跃",
-      "roles": ["master", "coach"],
-      "rationale": "master 是所有请求的入口，coach 是开发流程起点，两者必须随时可用",
-      "behavior": "RoleLoader.load_all() 时自动加载，不卸载"
-    },
-
-    "tier_2_on_demand": {
-      "description": "按需角色：首次调用时加载，会话内缓存复用",
-      "roles": ["knowledge_retriever", "writer", "quality_checker", "designer", "developer", "inspector", "tester", "deployer", "cleaner", "handoff_receiver"],
-      "rationale": "这些角色在特定任务中频繁使用，但并非每次请求都需要",
-      "behavior": "首次调用时 RoleLoader.load_role() 加载，会话内缓存，最多同时 8 个",
-      "warm_up": ["knowledge_retriever", "writer"],
-      "hot_path": {
-        "dev_flow": ["coach", "designer", "developer", "inspector", "tester", "deployer", "cleaner"],
-        "content_flow": ["knowledge_retriever", "writer", "quality_checker"],
-        "modification_flow": ["handoff_receiver", "inspector", "developer", "tester", "deployer", "cleaner"]
-      }
-    },
-
-    "tier_3_low_frequency": {
-      "description": "低频角色：仅在用户明确需要时加载，用完即卸载",
-      "roles": ["hr_manager", "creative", "translator", "scheduler", "visual_analyzer"],
-      "rationale": "使用频率低或需要特殊资源（如 visual_analyzer 需多模态模型）",
-      "behavior": "用户明确请求时加载，空闲 300 秒后自动卸载"
-    }
-  },"error_handling": {
+  "error_handling": {
     "role_timeout": {
       "description": "角色超时未响应",
       "timeout_seconds": 120,

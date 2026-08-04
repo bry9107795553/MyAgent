@@ -168,10 +168,10 @@ class BaseAgent:
 
     async def chat_stream(self, user_message: str):
         """
-        流式对话 — 返回异步生成器
+        流式对话 — 返回异步生成器，逐 token yield
 
-        第一个 yield: 元数据 JSON (type, workgroup, roles_used)
-        后续 yield: 流式 token
+        元数据 (type, workgroup, roles_used) 通过 stream_meta 消息单独发送，
+        不在 token 流中混入 JSON，避免泄露到前端对话内容。
 
         优先通过角色系统流式调度，
         角色系统未加载时回退到直接 LLM 流式调用。
@@ -179,16 +179,7 @@ class BaseAgent:
         # 角色系统可用 → 通过主控流式调度
         if self._master:
             full_response = []
-            meta_yielded = False
             async for token in self._master.dispatch_stream(user_message):
-                if not meta_yielded:
-                    # 第一个 token 是元数据或进度信息
-                    meta_yielded = True
-                    yield json.dumps({
-                        "type": "meta",
-                        "workgroup": None,  # 流式阶段暂不解析
-                        "roles_used": [],
-                    })
                 full_response.append(token)
                 yield token
             self._append_history(user_message, "".join(full_response))
@@ -199,7 +190,6 @@ class BaseAgent:
         messages = self.get_messages(user_message)
 
         full_response = []
-        yield json.dumps({"type": "meta", "workgroup": None, "roles_used": []})
         async for token in llm_gateway.chat_stream(
             messages,
             temperature=settings.default_temperature,

@@ -1,0 +1,33 @@
+# =============================================================================
+# MyAgent Docker Compose — AMD ROCm 环境模拟
+# 
+# 使用方式:
+#   1. 复制 .env.docker 为 .env 并填入智谱 API Key
+#   2. docker compose build
+#   3. docker compose up -d
+#   4. 浏览器打开 http://localhost/
+# =============================================================================
+
+services:
+  myagent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: myagent
+    ports:
+      - "80:80"       # Nginx → 前端
+      - "8080:8080"   # FastAPI → 后端 API
+    environment:
+      - ZHIPU_API_KEY=${ZHIPU_API_KEY:-}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-cloud-zhipu}
+    volumes:
+      # 持久化数据目录 (Agents、Skins、Templates、Memory)
+      - ./data:/app/data
+    restart: unless-stopped
+    # AMD GPU 直通 (如果宿主机有 AMD GPU 可取消注释)
+    # devices:
+    #   - /dev/kfd:/dev/kfd
+    #   - /dev/dri:/dev/dri
+    # group_add:
+    #   - video
+    #   - render

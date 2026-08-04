@@ -1,0 +1,37 @@
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+*.pyo
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+.env.docker
+.env
+
+# Temp
+/tmp/
+*.log
+nohup.out

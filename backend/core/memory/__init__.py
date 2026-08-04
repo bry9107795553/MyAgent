@@ -22,11 +22,12 @@ from core.memory.working_memory import (
     Message, SummaryL1, SummaryL2,
     WorkingMemory, WorkingMemoryRegistry, wm_registry,
 )
+from core.memory.compressor import (
+    score_importance,
+    Compressor, compressor,
+)
 from core.memory.archive import (
     Archive, ArchiveRegistry, archive_registry,
-)
-from core.memory.compressor import (
-    Compressor, compressor,
 )
 from core.memory.session_memory import (
     SessionMemory, SessionMemoryRegistry, sm_registry,
