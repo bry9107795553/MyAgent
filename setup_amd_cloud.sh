@@ -1,151 +1,339 @@
 #!/bin/bash
 # ============================================================
 #  MyAgent AMD 云环境一键部署脚本
-#  目标环境: ModelScope AMD GPU 实例
-#  OS: Ubuntu 22.04 | ROCm: 7.2.1 | GPU: 192GB VRAM
+#
+#  目标环境: Radeon Cloud 实例
+#    GPU    : AMD Radeon PRO W7900 (RDNA3 / gfx1100)
+#    VRAM   : 48 GB GDDR6
+#    ROCm   : 7.2  (Ubuntu 22.04)
+#    vLLM   : 已预装 v0.16.1.dev0 (ROCm 7.2.1 构建) —— 本项目不使用，走 llama.cpp
+#
+#  数据来源: 用户于 Radeon Cloud 控制台实机确认的实例规格
+#  验证日期: 2025-08-04
+#  修订说明: 原头部写的 "MI300X / 192GB VRAM" 为错误假设，已按实机参数修正。
+#
+#  向后兼容: 本脚本所有关键参数均支持环境变量覆盖，换卡不用改脚本。
+#    例) 拿到 192GB MI300X 实例:
+#        QUANT=q8_0 CTX_SIZE=65536 PARALLEL=4 bash setup_amd_cloud.sh
+#    例) 只想把上下文调大:
+#        CTX_SIZE=16384 bash setup_amd_cloud.sh
 # ============================================================
 set -e
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 step() { echo -e "\n${GREEN}[Step $1]${NC} $2"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+fail() { echo -e "${RED}[FAIL]${NC} $1"; }
 
-PROJECT_DIR="$HOME/myagent"
-MODEL_DIR="$HOME/models"
-LLAMA_CPP_DIR="$HOME/llama.cpp"
+# ============================================================
+#  可调参数（全部支持环境变量覆盖）
+# ============================================================
+#
+# ---- 显存预算：Qwen2.5-14B-Instruct on 48GB W7900 ----
+#
+# 模型结构（决定 KV cache 大小）:
+#   层数 n_layer      = 48
+#   KV 头数 n_kv_head = 8      (GQA，比 MHA 省 5 倍 KV)
+#   head_dim          = 128
+#
+# KV cache 显存估算公式:
+#   bytes/token = 2(K和V) × n_layer × n_kv_head × head_dim × 2(fp16)
+#               = 2 × 48 × 8 × 128 × 2
+#               = 196,608 B = 0.1875 MiB / token
+#
+#   KV(GiB) = CTX_SIZE × 0.1875 / 1024
+#
+# 权重占用（GGUF 实测文件大小）:
+#   q4_k_m ≈  8.99 GiB      q5_k_m ≈ 10.5 GiB      q8_0 ≈ 15.7 GiB
+#
+# 另需 compute / graph buffer ≈ 1–2 GiB
+#
+# 各组合总占用（权重 + KV + 1.5GiB buffer）:
+#   ┌──────────┬────────┬────────┬────────┬────────┐
+#   │  CTX     │  8192  │ 16384  │ 32768  │ 65536  │
+#   │  KV(GiB) │  1.5   │  3.0   │  6.0   │  12.0  │
+#   ├──────────┼────────┼────────┼────────┼────────┤
+#   │ q4_k_m   │ ~12.0  │ ~13.5  │ ~16.5  │ ~22.5  │
+#   │ q5_k_m   │ ~13.5  │ ~15.0  │ ~18.0  │ ~24.0  │
+#   └──────────┴────────┴────────┴────────┴────────┘
+#
+# ⚠ 重要结论（与最初"48GB 会 OOM"的判断不同）:
+#   Qwen2.5-14B 用的是 GQA（只有 8 个 KV 头），KV cache 比想象中便宜得多。
+#   即使 q5_k_m + 32K 上下文，总占用也只有 ~18GB / 48GB —— 完全不会 OOM。
+#   下面默认值 CTX_SIZE=8192 是**保守起步基线**，不是显存上限所迫。
+#   上机跑通基线后，建议直接抬到 16384（见「高性能模式」）。
+#
+# ⚠ A/B 测速特别提醒:
+#   原版（baseline）角色提示词最长的是 coach，7201 字符 ≈ 4300–5000 tokens。
+#   叠加对话历史 + default_max_tokens=4096（backend/config/models.yaml），
+#   8192 的上下文对 **A 组（原版 prompt）** 偏紧，可能截断或报 context overflow。
+#   → 跑 A/B 对比时请用 CTX_SIZE=16384，A、B 两组保持一致。
+#   → 8192 仅适合 slim 版（600–900 字 ≈ 600 tokens）单轮问答冒烟测试。
+
+# 量化版本：q4_k_m（默认，给 KV cache 留足空间） / q5_k_m / q8_0
+QUANT="${QUANT:-q4_k_m}"
+
+# 上下文长度。注意：这是 llama-server 的**总**上下文，
+# 会被 --parallel 平分！每个槽位实得 = CTX_SIZE / PARALLEL。
+CTX_SIZE="${CTX_SIZE:-8192}"
+
+# 并发槽位数。默认 1 —— 保证 CTX_SIZE 全部给到单个会话。
+# ⚠ 原脚本写 --parallel 4 且 ctx 32768，实际每槽只有 8192；
+#   若沿用 parallel=4 再把 ctx 降到 8192，每槽只剩 2048，必炸。
+PARALLEL="${PARALLEL:-1}"
+
+# 卸载到 GPU 的层数。99 = 全部（W7900 48GB 完全放得下 14B）
+NGL="${NGL:-99}"
+
+# 批大小
+BATCH_SIZE="${BATCH_SIZE:-512}"
+
+# GPU 架构。W7900 = gfx1100 (RDNA3)。
+# 指定它可以只编译单架构，编译时间从 ~40min 降到 ~10min。
+AMDGPU_TARGET="${AMDGPU_TARGET:-gfx1100}"
+
+# 端口（与 nginx.conf / backend/config/settings.py 对齐，勿随意改）
+#   8000 = llama-server (OpenAI 兼容接口)
+#   8080 = FastAPI 后端
+#   80   = nginx 统一入口
+LLAMA_PORT="${LLAMA_PORT:-8000}"
+BACKEND_PORT="${BACKEND_PORT:-8080}"
+
+# 模型别名（必须与 backend/config/models.yaml 的 model_name 一致）
+MODEL_ALIAS="Qwen2.5-14B-Instruct"
+
+# === 可选：高性能模式（如果 8K 测速通过且显存有余量，取消注释切换）===
+# QUANT=q5_k_m          # 更高精度，多占 ~1.5GB
+# CTX_SIZE=16384        # 更长上下文，KV cache 多占 ~1.5GB
+# 注意：此组合预估总占用 ~15GB/48GB，远未触顶，建议先跑 8K 基线后再试。
+#      （原注释估的 35-40GB 是按 MHA 算的，Qwen2.5 用 GQA，实际低得多）
+#
+# 更激进（仍安全）:
+# QUANT=q5_k_m CTX_SIZE=32768 PARALLEL=1    → ~18GB/48GB
+
+# ============================================================
+#  路径（与 install.sh / start.sh 严格对齐）
+# ============================================================
+# ⚠ 修订：原脚本把模型下到 $HOME/models/Qwen2.5-14B-Instruct-Q4_K_M.gguf，
+#   而 start.sh 只在 $HOME/llama.cpp/models/ 下找 *.gguf —— 路径对不上，
+#   导致 setup 跑完后 start.sh 报「GGUF 模型未找到」。现统一到 install.sh 的路径。
+PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+LLAMA_CPP_DIR="${LLAMA_CPP_DIR:-$HOME/llama.cpp}"
+MODEL_DIR="$LLAMA_CPP_DIR/models"
+MODEL_FILE="$MODEL_DIR/qwen2.5-14b-instruct-${QUANT}.gguf"
+
+# 下载源（ModelScope 优先，国内最快；与 install.sh 一致）
+MODEL_URLS=(
+    "https://www.modelscope.cn/models/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/master/qwen2.5-14b-instruct-${QUANT}.gguf"
+    "https://hf-mirror.com/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-${QUANT}.gguf"
+    "https://huggingface.co/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-${QUANT}.gguf"
+)
+
+# 参数合法性守卫（避免 set -e 下被除零直接干掉）
+if ! [ "$PARALLEL" -ge 1 ] 2>/dev/null; then
+    fail "PARALLEL 必须是 >=1 的整数，当前: '$PARALLEL'"
+    exit 1
+fi
+if ! [ "$CTX_SIZE" -ge 512 ] 2>/dev/null; then
+    fail "CTX_SIZE 必须是 >=512 的整数，当前: '$CTX_SIZE'"
+    exit 1
+fi
+
+# 每槽实得上下文
+CTX_PER_SLOT=$(( CTX_SIZE / PARALLEL ))
+# KV cache 估算 (MiB)：CTX_SIZE × 0.1875 MiB
+KV_MIB=$(( CTX_SIZE * 3 / 16 ))
 
 echo "============================================"
 echo "  MyAgent AMD 云环境部署"
-echo "  目标: ROCm 7.2.1 | 192GB VRAM"
+echo "  目标: Radeon PRO W7900 / 48GB / ROCm 7.2"
+echo "--------------------------------------------"
+echo "  量化版本   : $QUANT"
+echo "  总上下文   : $CTX_SIZE"
+echo "  并发槽位   : $PARALLEL  (每槽 $CTX_PER_SLOT tokens)"
+echo "  KV cache   : ~${KV_MIB} MiB"
+echo "  GPU 架构   : $AMDGPU_TARGET"
+echo "  模型路径   : $MODEL_FILE"
 echo "============================================"
+
+if [ "$CTX_PER_SLOT" -lt 4096 ]; then
+    warn "每槽上下文只有 $CTX_PER_SLOT tokens，低于 4096。"
+    warn "原版角色提示词（coach 约 5000 tokens）会溢出。"
+    warn "建议: PARALLEL=1 或调大 CTX_SIZE。"
+fi
 
 # ============================================================
 # Step 1: 系统依赖检查
 # ============================================================
-step "1/8" "检查系统依赖"
+step "1/9" "检查系统依赖"
 
-# 检查 ROCm
 if command -v rocminfo &> /dev/null; then
-    echo "  ✓ ROCm: $(rocminfo 2>/dev/null | grep -m1 'Marketing Name' | awk '{print $NF}')"
+    gpu_name=$(rocminfo 2>/dev/null | grep -m1 'Marketing Name' | cut -d: -f2- | xargs)
+    echo "  ✓ GPU: ${gpu_name:-unknown}"
+    gfx=$(rocminfo 2>/dev/null | grep -m1 -o 'gfx[0-9a-z]*' || true)
+    echo "  ✓ 架构: ${gfx:-unknown}  (期望 gfx1100)"
+    if [ -n "$gfx" ] && [ "$gfx" != "$AMDGPU_TARGET" ]; then
+        warn "实际架构 $gfx 与 AMDGPU_TARGET=$AMDGPU_TARGET 不符。"
+        warn "请重跑: AMDGPU_TARGET=$gfx bash setup_amd_cloud.sh"
+    fi
     rocm_version=$(dpkg -l rocm-core 2>/dev/null | grep rocm-core | awk '{print $3}' | cut -d. -f1-2)
-    echo "  ✓ ROCm 版本: $rocm_version"
+    echo "  ✓ ROCm 版本: ${rocm_version:-unknown}  (期望 7.2)"
 else
-    echo "  ⚠ rocminfo 未找到，但继续（可能在容器中）"
+    warn "rocminfo 未找到，但继续（可能在容器中）"
 fi
 
-# 检查 Python
 python3 --version
 echo "  ✓ Python: $(python3 --version)"
 
-# 检查 GPU 显存
-if command -v rocm-smi &> /dev/null; then
-    echo "  ✓ GPU 信息:"
-    rocm-smi --showmeminfo vram 2>/dev/null | head -5 || true
+# ============================================================
+# Step 2: GPU 显存检查
+# ============================================================
+step "2/9" "GPU 显存检查"
+
+echo "=== GPU VRAM Check ==="
+amd-smi static --vram 2>/dev/null || rocm-smi --showmeminfo vram 2>/dev/null || echo "[WARN] Could not detect VRAM"
+echo "Expected: ~48GB for W7900. If significantly lower, abort and check allocation."
+echo ""
+
+# 尝试解析实际显存并给出判断
+vram_mib=$(rocm-smi --showmeminfo vram --csv 2>/dev/null \
+    | awk -F, 'NR>1 && $2 ~ /^[0-9]+$/ {print int($2/1048576); exit}')
+if [ -n "$vram_mib" ] && [ "$vram_mib" -gt 0 ]; then
+    echo "  检测到显存: ${vram_mib} MiB (~$(( vram_mib / 1024 )) GiB)"
+    if [ "$vram_mib" -lt 40000 ]; then
+        warn "显存低于 40GiB —— 分配到的可能不是 W7900！"
+        warn "建议: 降低 CTX_SIZE 或销毁实例重新排队。"
+        warn "5 秒后继续（Ctrl+C 中止）..."
+        sleep 5
+    else
+        echo "  ✓ 显存充足"
+    fi
+else
+    warn "无法自动解析显存数值，请人工核对上方输出。"
 fi
 
 # ============================================================
-# Step 2: 安装编译工具
+# Step 3: 安装编译工具
 # ============================================================
-step "2/8" "安装编译依赖"
+step "3/9" "安装编译依赖"
 
 sudo apt-get update -qq
 sudo apt-get install -y -qq \
-    build-essential cmake git curl wget \
-    libssl-dev libffi-dev \
-    rocm-dev hip-dev 2>/dev/null || true
+    build-essential cmake git curl wget nginx \
+    libssl-dev libffi-dev libcurl4-openssl-dev \
+    python3-venv 2>/dev/null || true
 
 echo "  ✓ 编译工具已安装"
 
 # ============================================================
-# Step 3: 编译 llama.cpp (ROCm 版)
+# Step 4: 编译 llama.cpp (ROCm / gfx1100)
 # ============================================================
-step "3/8" "编译 llama.cpp (ROCm 后端)"
+step "4/9" "编译 llama.cpp (ROCm 后端, $AMDGPU_TARGET)"
 
-if [ ! -d "$LLAMA_CPP_DIR" ]; then
-    git clone --depth 1 https://github.com/ggerganov/llama.cpp.git "$LLAMA_CPP_DIR"
+if [ -f "$LLAMA_CPP_DIR/build/bin/llama-server" ]; then
+    echo "  ✓ llama-server 已存在，跳过编译"
+    echo "    (如需重编译: rm -rf $LLAMA_CPP_DIR/build)"
+else
+    if [ ! -d "$LLAMA_CPP_DIR" ]; then
+        git clone --depth 1 https://github.com/ggerganov/llama.cpp.git "$LLAMA_CPP_DIR"
+    fi
+
+    cd "$LLAMA_CPP_DIR"
+    git fetch --tags --depth 1 2>/dev/null || true
+    latest_tag=$(git tag -l 'b*' --sort=-v:refname | head -1)
+    if [ -n "$latest_tag" ]; then
+        git checkout "$latest_tag" 2>/dev/null && echo "  ✓ 使用版本: $latest_tag" || true
+    fi
+
+    # ROCm 编译。指定 AMDGPU_TARGETS 只编 gfx1100，大幅缩短编译时间。
+    mkdir -p build && cd build
+    cmake .. \
+        -DGGML_HIP=ON \
+        -DAMDGPU_TARGETS="$AMDGPU_TARGET" \
+        -DCMAKE_C_COMPILER=hipcc \
+        -DCMAKE_CXX_COMPILER=hipcc \
+        -DCMAKE_BUILD_TYPE=Release 2>&1 | tail -5
+    cmake --build . --config Release -j"$(nproc)" 2>&1 | tail -5
+
+    echo "  ✓ llama.cpp 编译完成"
 fi
 
-cd "$LLAMA_CPP_DIR"
-
-# 使用最新稳定版（兼容 ROCm 7.2）
-git fetch --tags
-latest_tag=$(git tag -l 'b*' --sort=-v:refname | head -1)
-if [ -n "$latest_tag" ]; then
-    git checkout "$latest_tag"
-    echo "  ✓ 使用版本: $latest_tag"
-fi
-
-# 编译（ROCm 后端）
-mkdir -p build && cd build
-cmake .. -DGGML_HIP=ON -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
-    -DCMAKE_BUILD_TYPE=Release -DGGML_HIPBLAS=ON 2>&1 | tail -3
-cmake --build . --config Release -j$(nproc) 2>&1 | tail -5
-
-echo "  ✓ llama.cpp 编译完成"
-
-# 验证
 if [ -f "$LLAMA_CPP_DIR/build/bin/llama-server" ]; then
     echo "  ✓ llama-server 可用"
 else
-    echo "  ✗ llama-server 编译失败！"
+    fail "llama-server 编译失败！查看上方 cmake 输出。"
     exit 1
 fi
 
 # ============================================================
-# Step 4: 下载模型 (Qwen2.5-14B-Instruct GGUF)
+# Step 5: 下载模型
 # ============================================================
-step "4/8" "下载模型"
+step "5/9" "下载模型 (Qwen2.5-14B-Instruct $QUANT)"
 
 mkdir -p "$MODEL_DIR"
 
-MODEL_FILE="$MODEL_DIR/Qwen2.5-14B-Instruct-Q4_K_M.gguf"
-MODEL_URL="https://huggingface.co/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-q4_k_m.gguf"
+check_gguf_magic() {
+    local f="$1"
+    [ -f "$f" ] || return 1
+    local magic
+    magic=$(head -c 4 "$f" 2>/dev/null)
+    [ "$magic" = "GGUF" ]
+}
 
-if [ -f "$MODEL_FILE" ]; then
-    echo "  ✓ 模型已存在: $MODEL_FILE"
+if check_gguf_magic "$MODEL_FILE"; then
+    echo "  ✓ 模型已存在且 GGUF 头有效: $MODEL_FILE"
     ls -lh "$MODEL_FILE"
 else
-    echo "  下载中... (约 9GB，请耐心等待)"
-    wget -q --show-progress -O "$MODEL_FILE" "$MODEL_URL" || {
-        warn "HuggingFace 下载失败，尝试 ModelScope 镜像..."
-        # ModelScope 镜像
-        pip install modelscope -q
-        python3 -c "
-from modelscope import snapshot_download
-snapshot_download('Qwen/Qwen2.5-14B-Instruct-GGUF', cache_dir='$MODEL_DIR')
-"
-    }
-    echo "  ✓ 模型下载完成"
+    [ -f "$MODEL_FILE" ] && { warn "已存在文件损坏，删除重下"; rm -f "$MODEL_FILE"; }
+    echo "  下载中... (q4_k_m 约 9GB / q5_k_m 约 10.5GB，请耐心等待)"
+
+    downloaded=false
+    for url in "${MODEL_URLS[@]}"; do
+        echo "  尝试: ${url%%/resolve*}"
+        if wget -q --show-progress -c -O "$MODEL_FILE" "$url"; then
+            if check_gguf_magic "$MODEL_FILE"; then
+                downloaded=true
+                break
+            fi
+            warn "GGUF magic 无效，换下一个源"
+        fi
+        rm -f "$MODEL_FILE"
+    done
+
+    if [ "$downloaded" != true ]; then
+        fail "模型下载失败，请手动下载到: $MODEL_FILE"
+        echo "    优先: https://www.modelscope.cn/models/Qwen/Qwen2.5-14B-Instruct-GGUF"
+        exit 1
+    fi
+    echo "  ✓ 模型下载完成 ($(du -h "$MODEL_FILE" | cut -f1))"
 fi
 
 # ============================================================
-# Step 5: Python 后端环境
+# Step 6: Python 后端环境
 # ============================================================
-step "5/8" "配置 Python 后端"
+step "6/9" "配置 Python 后端"
 
 cd "$PROJECT_DIR/backend"
-
-# 创建虚拟环境
-python3 -m venv venv
+[ -d venv ] || python3 -m venv venv
+# shellcheck disable=SC1091
 source venv/bin/activate
-
-# 安装依赖
 pip install --upgrade pip -q
 pip install -r requirements.txt -q
+deactivate
 
 echo "  ✓ Python 依赖已安装"
 
 # ============================================================
-# Step 6: 安装 Node.js 并构建前端
+# Step 7: 构建前端
 # ============================================================
-step "6/8" "构建前端"
+step "7/9" "构建前端"
 
-# 安装 Node.js (使用 nvm)
 if ! command -v node &> /dev/null; then
     export NVM_DIR="$HOME/.nvm"
     if [ ! -d "$NVM_DIR" ]; then
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
     fi
+    # shellcheck disable=SC1091
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
     nvm install 22
     nvm use 22
@@ -158,130 +346,188 @@ cd "$PROJECT_DIR/frontend"
 npm install --silent 2>&1 | tail -3
 npm run build 2>&1 | tail -5
 
-echo "  ✓ 前端构建完成"
+echo "  ✓ 前端构建完成 → $PROJECT_DIR/frontend/dist"
 
 # ============================================================
-# Step 7: 创建 .env 配置
+# Step 8: 配置 Nginx（单端口 80 统一入口）
 # ============================================================
-step "7/8" "创建配置文件"
+step "8/9" "配置 Nginx"
 
-cd "$PROJECT_DIR"
-cat > .env << 'EOF'
-# MyAgent 环境配置
-#
-# 本项目为纯本地推理，全部计算跑在本机 llama.cpp (ROCm / AMD Radeon GPU)。
-# 这里没有、也不允许出现任何远程模型服务的 API Key。
-# LLAMA_BASE_URL 必须是本机地址，否则后端启动时会被
-# config/settings.py::assert_local_endpoint() 直接拒绝。
-
-# llama.cpp 本地推理
-LLAMA_BASE_URL=http://localhost:8000/v1
-LLAMA_MODEL=Qwen2.5-14B-Instruct
-LLAMA_API_KEY=EMPTY
-
-# 单 GPU 模式（AMD 云实例只有一张 GPU）
-SINGLE_GPU_MODE=true
-EOF
-
-echo "  ✓ .env 已创建"
+if command -v nginx &> /dev/null; then
+    FRONTEND_DIST="$PROJECT_DIR/frontend/dist"
+    sed "s|__FRONTEND_DIST__|${FRONTEND_DIST}|g" "$PROJECT_DIR/nginx.conf" > /tmp/nginx_myagent.conf
+    sudo cp /tmp/nginx_myagent.conf /etc/nginx/nginx.conf
+    rm -f /tmp/nginx_myagent.conf
+    sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+    sudo nginx -t && echo "  ✓ Nginx 配置已就位 (端口 80)"
+else
+    warn "nginx 未安装，跳过。前端可用 'npx vite preview' 临时预览。"
+fi
 
 # ============================================================
-# Step 8: 创建启动脚本
+# Step 9: 生成启动脚本
 # ============================================================
-step "8/8" "创建启动脚本"
+step "9/9" "生成启动脚本"
 
 cd "$PROJECT_DIR"
 
-# 启动 llama-server
-cat > start_llama.sh << 'LLAMA_SCRIPT'
-#!/bin/bash
-# 启动 llama.cpp 推理服务
-MODEL_DIR="$HOME/models"
-LLAMA_CPP_DIR="$HOME/llama.cpp"
-MODEL="$MODEL_DIR/Qwen2.5-14B-Instruct-Q4_K_M.gguf"
+# ---- llama-server 启动脚本（参数从本脚本注入，保持一致）----
+# 先写入注入的默认值（可被环境变量覆盖），再追加固定的逻辑体。
+{
+    echo '#!/bin/bash'
+    echo '# 由 setup_amd_cloud.sh 生成 —— 参数已按 W7900 48GB 校准'
+    echo '# 所有变量可用环境变量覆盖，例: CTX_SIZE=16384 bash start_llama.sh'
+    echo "MODEL=\"\${MODEL:-$MODEL_FILE}\""
+    echo "LLAMA_CPP_DIR=\"\${LLAMA_CPP_DIR:-$LLAMA_CPP_DIR}\""
+    echo "MODEL_ALIAS=\"\${MODEL_ALIAS:-$MODEL_ALIAS}\""
+    echo "CTX_SIZE=\"\${CTX_SIZE:-$CTX_SIZE}\""
+    echo "PARALLEL=\"\${PARALLEL:-$PARALLEL}\""
+    echo "NGL=\"\${NGL:-$NGL}\""
+    echo "BATCH_SIZE=\"\${BATCH_SIZE:-$BATCH_SIZE}\""
+    echo "LLAMA_PORT=\"\${LLAMA_PORT:-$LLAMA_PORT}\""
+} > start_llama.sh
+
+cat >> start_llama.sh << 'LLAMA_SCRIPT'
 
 if [ ! -f "$MODEL" ]; then
     echo "模型文件不存在: $MODEL"
+    echo "请先运行: bash setup_amd_cloud.sh"
     exit 1
 fi
 
-echo "启动 llama-server (Qwen2.5-14B, ROCm)..."
-$LLAMA_CPP_DIR/build/bin/llama-server \
+echo "启动 llama-server ($MODEL_ALIAS, ROCm)"
+echo "  ctx=$CTX_SIZE  parallel=$PARALLEL  (每槽 $(( CTX_SIZE / PARALLEL )))"
+echo "  KV cache ~ $(( CTX_SIZE * 3 / 16 )) MiB"
+
+exec "$LLAMA_CPP_DIR/build/bin/llama-server" \
     -m "$MODEL" \
+    -a "$MODEL_ALIAS" \
     --host 0.0.0.0 \
-    --port 8000 \
-    -ngl 99 \
-    --ctx-size 32768 \
-    --batch-size 512 \
-    --parallel 4 \
-    --alias Qwen2.5-14B-Instruct \
+    --port "$LLAMA_PORT" \
+    -ngl "$NGL" \
+    --ctx-size "$CTX_SIZE" \
+    --batch-size "$BATCH_SIZE" \
+    --parallel "$PARALLEL" \
     --no-webui
 LLAMA_SCRIPT
 chmod +x start_llama.sh
 
-# 启动后端
-cat > start_backend.sh << 'BACKEND_SCRIPT'
+echo "  ✓ start_llama.sh"
+echo "  ✓ 全栈启停请用仓库自带的 start.sh / stop.sh"
+
+# ---- A/B 测速辅助（可 source 使用）----
+cat > bench_helpers.sh << 'BENCH_SCRIPT'
 #!/bin/bash
-# 启动 MyAgent 后端
-cd "$HOME/myagent/backend"
-source venv/bin/activate
-export $(grep -v '^#' ../.env | xargs)
-python main.py
-BACKEND_SCRIPT
-chmod +x start_backend.sh
+# === A/B Benchmark Helper ===
+# 用法（必须 source，不能直接 bash 执行）:
+#   source bench_helpers.sh
+#   benchmark_slim    # 切精简版 prompt (B 组)
+#   benchmark_orig    # 切原版 prompt   (A 组基线)
+#   bench_one "开发一个带增删改查的待办事项 Web 应用"   # 单次计时
 
-# 一键启动
-cat > start_all.sh << 'ALL_SCRIPT'
-#!/bin/bash
-# 一键启动 MyAgent 全部服务
-echo "启动 llama.cpp 推理服务..."
-nohup bash "$HOME/myagent/start_llama.sh" > /tmp/llama.log 2>&1 &
-LLAMA_PID=$!
+MYAGENT_DIR="${MYAGENT_DIR:-$HOME/myagent}"
+# 后端直连端口（nginx 在 80，但测速直连 8080 避开代理开销）
+BENCH_PORT="${BENCH_PORT:-8080}"
+# 对话端点为 /api/agents/{agent_id}/chat，默认 agent 见 data/agents/
+AGENT_ID="${AGENT_ID:-general_assistant}"
 
-# 等待 llama-server 就绪
-echo "等待 llama-server 就绪..."
-for i in $(seq 1 30); do
-    if curl -s http://localhost:8000/health > /dev/null 2>&1; then
-        echo "llama-server 已就绪"
-        break
-    fi
-    sleep 2
-done
+_restart_backend() {
+    echo "  重启后端以加载新的 PROMPT_VARIANT..."
+    bash "$MYAGENT_DIR/stop.sh"  > /dev/null 2>&1 || true
+    bash "$MYAGENT_DIR/start.sh" > /dev/null 2>&1 || true
+    sleep 3
+}
 
-echo "启动 MyAgent 后端..."
-cd "$HOME/myagent/backend"
-source venv/bin/activate
-export $(grep -v '^#' ../.env | xargs)
-python main.py &
-BACKEND_PID=$!
+benchmark_slim() {
+    export PROMPT_VARIANT=slim
+    echo "=== BENCHMARK: SLIM (optimized) prompts ==="
+    echo "PROMPT_VARIANT=$PROMPT_VARIANT"
+    _restart_backend
+}
+
+benchmark_orig() {
+    unset PROMPT_VARIANT
+    echo "=== BENCHMARK: ORIGINAL (baseline) prompts ==="
+    echo "PROMPT_VARIANT=${PROMPT_VARIANT:-default}"
+    _restart_backend
+}
+
+# 单次计时 + 抓 prompt_tokens
+# 用法: bench_one "开发一个带增删改查的待办事项 Web 应用"
+bench_one() {
+    local msg="${1:-开发一个带增删改查的待办事项 Web 应用}"
+    local variant="${PROMPT_VARIANT:-original}"
+    local url="http://localhost:${BENCH_PORT}/api/agents/${AGENT_ID}/chat"
+    local payload start end elapsed tokens
+
+    # 用 python 安全地构造 JSON（消息含中文/引号也不会坏）
+    payload=$(MSG="$msg" python3 -c 'import json,os;print(json.dumps({"message":os.environ["MSG"],"stream":False}))')
+
+    start=$(date +%s%3N)
+    curl -s -X POST "$url" -H "Content-Type: application/json" -d "$payload" \
+        > "/tmp/bench_out_${variant}.json"
+    end=$(date +%s%3N)
+    elapsed=$(( end - start ))
+
+    # 从 llama-server 日志抓最近一次的真实 prompt_tokens（勿用估算值）
+    tokens=$(grep -o '"prompt_tokens":[0-9]*' /tmp/llama.log 2>/dev/null | tail -1 | cut -d: -f2)
+
+    echo "variant=$variant  elapsed=${elapsed}ms  prompt_tokens=${tokens:-N/A}"
+    echo "$variant,$elapsed,${tokens:-},$(date -Iseconds)" >> "/tmp/bench_${variant}.csv"
+}
+
+# 打印已采集结果
+bench_report() {
+    local v
+    for v in original slim; do
+        [ -f "/tmp/bench_${v}.csv" ] || continue
+        echo "--- $v ---"
+        echo "variant,elapsed_ms,prompt_tokens,timestamp"
+        cat "/tmp/bench_${v}.csv"
+        awk -F, '{s+=$2; n++} END{if(n)printf "  平均耗时: %.0f ms  (n=%d)\n", s/n, n}' "/tmp/bench_${v}.csv"
+    done
+}
+BENCH_SCRIPT
+chmod +x bench_helpers.sh
+echo "  ✓ bench_helpers.sh  (用法: source bench_helpers.sh)"
 
 echo ""
 echo "============================================"
-echo "  MyAgent 启动完成!"
-echo "  前端: http://localhost:8080"
-echo "  API:  http://localhost:8080/api"
-echo "  文档: http://localhost:8080/docs"
+echo "  部署完成！"
 echo "============================================"
 echo ""
-echo "  进程 ID:"
-echo "  llama-server: $LLAMA_PID"
-echo "  backend:      $BACKEND_PID"
+echo "  启动:"
+echo "    cd $PROJECT_DIR && bash start.sh"
 echo ""
-echo "  停止服务: kill $LLAMA_PID $BACKEND_PID"
+echo "  访问:"
+echo "    http://<实例IP>/               → 前端界面 (nginx:80)"
+echo "    http://localhost:$BACKEND_PORT/docs      → API 文档 (FastAPI 直连)"
+echo "    http://localhost:$BACKEND_PORT/api/health → 健康检查"
+echo "    http://localhost:$LLAMA_PORT/v1/models  → llama-server 模型列表"
+echo ""
+echo "  A/B 测速:"
+echo "    source $PROJECT_DIR/bench_helpers.sh"
+echo "    benchmark_orig   # A 组基线"
+echo "    benchmark_slim   # B 组精简"
+echo ""
+echo "  详细上机步骤见: QUICKSTART_CLOUD.md"
+echo "============================================"
 
-wait
-ALL_SCRIPT
-chmod +x start_all.sh
+# ============================================================
+#  A/B Benchmark Helper (同时内联定义，便于 source 本脚本时直接使用)
+# ============================================================
+# Usage:
+#   benchmark_slim    # Run with slim prompts (optimized)
+#   benchmark_orig    # Run with original prompts (baseline)
+benchmark_slim() {
+    export PROMPT_VARIANT=slim
+    echo "=== BENCHMARK: SLIM (optimized) prompts ==="
+    echo "PROMPT_VARIANT=$PROMPT_VARIANT"
+    # Restart backend with new env
+}
 
-echo ""
-echo "============================================"
-echo "  🎉 部署完成！"
-echo "============================================"
-echo ""
-echo "  启动方式:"
-echo "    cd ~/myagent && bash start_all.sh"
-echo ""
-echo "  或分步启动:"
-echo "    bash start_llama.sh      # 先启动 LLM 推理"
-echo "    bash start_backend.sh     # 再启动后端"
-echo "============================================"
+benchmark_orig() {
+    unset PROMPT_VARIANT
+    echo "=== BENCHMARK: ORIGINAL (baseline) prompts ==="
+    echo "PROMPT_VARIANT=${PROMPT_VARIANT:-default}"
+}
