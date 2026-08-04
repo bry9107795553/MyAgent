@@ -299,3 +299,81 @@ FAILED_STEPS = 0        ← 管线自认为成功，这正是最恶劣的地方
    故本轮未动；若后续演示走「动态组装」路径需复评。
 3. **`dispatcher_config.json` 的 `parallel_matrix.gpu2_roles` 缺 `experience_evaluator`** ——
    与 `role_pool.json` 的 gpu2 列表不一致。仅影响多卡模式下的并行规划元数据，单卡无影响，未改。
+
+---
+
+## 9. 工具调用闭环接通（评分表「工具调用」能力项 · 20 分）
+
+> 触发：赛道评分表第 2 项要求「任务分解、**工具调用**、RAG、记忆管理」，
+> 我们一直对外声称实现了工具调用，但核查代码发现**它实际没接通**——两端（工具实现层 / 注册表 / 网关）都是完整的，中间两环断着。
+> 授权范围：修复类，直接改源码，改完 commit；只做这一件事（上云脚本 / prompt / 记忆系统未碰）。
+
+### 9.1 问题定性
+
+| 项 | 结论 |
+|---|---|
+| 工具实现层 | 完整：`backend/core/tools/builtin/` 5 个真工具（file_read / file_write / file_list / code_exec / web_search），含 `_is_within_project()` 沙箱校验 |
+| 注册表 | 完整：`ToolRegistry` 有 `register/get/get_available_tools/get_tool_definitions`，`BaseTool.to_openai_format()` 输出标准 schema，全局单例 `tool_registry` 在 base.py:160 |
+| 网关层 | 完整：`gateway.py:134` 已把 `tools` 传给 `client.chat.completions.create()`，`:143-149` 已把 `tool_calls` 解析成 `result["tool_calls"]` |
+| 断点 A | 没人往里传工具定义：全库 grep `get_tool_definitions\|tool_registry\|get_available_tools`（排除 `core/tools/` 自身）外部调用点为零 → gateway 的 `tools` 永远收到 `None` |
+| 断点 B | 没人消费返回的 `tool_calls`：全库 grep `tool_calls` 只有 gateway.py 那 5 行，没有任何地方执行工具、回填 messages、再请求模型 |
+| **隐藏根因** | **内置工具从未在运行时注册**：`core/tools/__init__.py` 的 `from core.tools import builtin`（注册副作用）从未被任何启动路径 import，导致 `tool_registry` 始终为空。即使接上 A/B，不修这个也是空转 |
+
+> `loader.py:366` 那句 `tools = "、".join(self.tool_names)` 只是把工具名拼进提示词文本，**那是"告诉模型你有这些工具"，不是 function calling**，勿误判为已实现。
+
+### 9.2 改动清单
+
+| 文件 | 改动 | 可回退性 |
+|---|---|---|
+| `backend/core/role/role_base.py` | 顶部 `import json` + `from core.tools.base import tool_registry`（导入即触发内置工具注册，修复隐藏根因）；新增模块常量 `MAX_TOOL_ITERATIONS = 5`；重构 `_call_llm()`：构造 `agent_config={"tools": {name:True for name in self.tool_names}}`，调 `tool_registry.get_tool_definitions(agent_config)` 取该角色授权 schema 传给 gateway（断点 A）；新增 `_run_tool_loop()`：模型返回 `tool_calls` → 逐个 `tool_registry.execute_tool()` 执行 → 结果以 `role:"tool"` 消息回填 → 再请求模型，直到不再要求调工具或达上限（断点 B） | 纯新增 + 收敛，无行为增量；回退即恢复旧 `_call_llm` |
+| `data/role_pool.json` | `developer.tools` 由虚构名 `["code_writer","file_manager","dependency_checker","git_tools","debt_tracker"]` 改为真实注册名 `["code_exec","file_read","file_write","file_list"]`——让演示路径（写文件）真能调起 file_write，且白名单变为真实可调用工具 | 改回原数组即恢复 |
+
+**未碰**：其他 17 个角色的 `tools` 仍是虚构名（无对应注册工具 → 经注册表过滤后自然为零工具，行为不变）；`setup_amd_cloud.sh` / prompt 文件 / 记忆系统均未改动。
+
+### 9.3 断点 A / B 接通方式（尊重角色级授权，不绕过）
+
+- 角色级工具授权是**设计好的**（`get_available_tools(agent_config)` 按 `tools` 段过滤），`role_pool.json` 的 `tools` 字段即授权白名单。本改动严格走这条过滤链：角色 `tool_names` → `agent_config["tools"]` → `get_tool_definitions()`，不另起一套。
+- 无工具授权的角色：`tool_defs` 为空 → 传 `tools=None`，与历史行为**字节级一致**（gateway 本就接收 `tools=None`）。
+- 有授权的角色（developer）：传入 4 个真实 schema，模型可发起 function calling。
+
+### 9.4 最大轮次 & 容错（上机演示防死循环）
+
+- **最大轮次上限 `MAX_TOOL_ITERATIONS = 5`**：模型连续要求调工具达到 5 轮后强制返回，绝不无限循环占死 GPU。
+- **容错**（llama.cpp 对 function calling 支持不如闭源 API 稳定，格式可能不标准）：
+  - `arguments` 非合法 JSON → 解析失败降级为空参 `{}`，不崩；
+  - 未知工具名 → 注册表返回「工具不存在」，作为 tool 消息回填让模型自行恢复，不崩；
+  - 工具执行异常 → 注册表 `execute_tool()` 已捕获 `TypeError/Timeout/Exception` 并返回错误 dict；
+  - LLM 调用本身异常 → 循环内 try/except 交还上一轮文本，不让工具循环吞掉错误。
+- 解析失败 / 未知工具均**不误写文件**（回归已验证）。
+
+### 9.5 回归验证
+
+环境：Windows / Python 3.13 / venv `.venv-diag` / 真·mock llama-server（OpenAI 兼容，监听 :8000，模型 `Qwen2.5-14B-Instruct`，上一会话遗留仍在运行）。
+
+| 测试 | 结果 |
+|---|---|
+| `tests/regression_tool_loop.py`（新增，进程内假 LLM 客户端闭环） | **PASS=19  FAIL=0** |
+| ├ 内置工具已注册（修复隐藏根因） | ✅ 5 个工具全部注册 |
+| ├ 断点 A：developer 的 LLM 调用带上了工具 schema（4 个） | ✅ |
+| ├ 断点 B：file_write 闭环 → **真实落盘** → 结果回填 → 模型二次回答 → 返回最终文本（2 次 LLM 调用） | ✅ 文件确实出现在磁盘 |
+| ├ 最大轮次上限：模型死循环调工具在第 5 轮强制结束 | ✅ 恰好 5 次调用，不卡死 |
+| ├ 容错：参数非合法 JSON / 未知工具名 → 不崩、降级为普通回复、不误写文件 | ✅ |
+| ├ 未授权角色（coach，tools 全虚构名）→ 不带 tools（与历史一致） | ✅ |
+| └ `dev_full` 七角色流水线在工具循环激活下照样跑通，零失败标记，developer 在管线内也带上了工具 schema | ✅ |
+| `tests/regression_single_gpu.py`（既有，32 断言） | **PASS=32  FAIL=0** —— 无回归，dev_full 十步全绿、零 8001/8002 |
+
+### 9.6 llama.cpp 启动参数结论（需云端最终验证）
+
+- `tools` 走标准 OpenAI function-calling 格式，`llm_gateway` 透传给 `client.chat.completions.create(tools=...)`。Qwen2.5-14B-Instruct GGUF 自带 function-calling chat template，**无需额外 `--jinja` / 特殊 flag** 即可启用工具调用（与闭源 API 同协议）。
+- 但**本环境无真实 GPU / 真 llama.cpp**，上述仅基于协议层推断 + mock 验证链路通。真模型对 `tool_calls` 的格式遵循度、是否需要 `--chat-template` 微调，需在云端 W7900 上录制演示时复核。若届时出现工具不被触发或格式错乱，最可能的开关在 `setup_amd_cloud.sh` 的 llama-server 启动参数（`--jinja` / chat template 相关）——届时可在此处追加。
+
+### 9.7 演示路径（评委看得见）
+
+- 用户让 developer 角色「写个文件」→ developer 被授权 `file_write` → 模型返回 `file_write` tool_call → 后端执行、文件**真的出现在磁盘**（沙箱限定在项目根目录内）→ 结果回填 → 模型总结「已写入」。这是一条可演示的工具调用闭环。
+- 前端展示位：当前未确认前端是否已有 tool_call 展示位。后端执行与落盘已就绪；若前端无展示位，**按边界不自行设计 UI**，交由 team-lead 决定。
+
+### 9.8 遗留 / 边界记录
+
+1. **其他 17 个角色的 `tools` 字段仍是虚构名**（`requirement_tools`、`dispatch_tools` 等），无对应注册工具 → 经注册表过滤后为零工具。这是「权限控制」能力的真实面：只有 developer 当前接了真实工具。若要扩展演示覆盖面，需为每个角色补齐真实注册工具（超出本轮回退范围）。
+2. **流式路径（`execute_stream` / `chat_stream`）未接工具循环**：本轮只接通非流式 `execute() → _call_llm()` 路径（演示路径即此）。流式角色不会触发 function calling，属已知限制，未动以免扩大范围。
+3. **`streaming` 与 `tools` 不可同时**：OpenAI 流式接口下 tool_calls 拼接复杂，故意不在本轮实现。

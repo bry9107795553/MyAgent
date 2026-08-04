@@ -110,7 +110,7 @@
       "model": "text",
       "gpu_affinity": "gpu0",
       "capabilities": ["module_implementation", "bug_fix", "tech_debt_management", "safe_refactor", "dependency_management"],
-      "tools": ["code_writer", "file_manager", "dependency_checker", "git_tools", "debt_tracker"],
+      "tools": ["code_exec", "file_read", "file_write", "file_list"],
       "description": "代码实现/返工修复/技术债管理/安全重构"
     },
     {

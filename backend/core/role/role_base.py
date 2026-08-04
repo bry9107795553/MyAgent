@@ -23,6 +23,8 @@ RoleBase — 角色抽象基类
     - 后勤角色 (logistics): 清洁员
     - 核心角色 (core): 主控 (MasterRole，特殊处理)
 """
+import json
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, asdict
 from typing import Optional, AsyncGenerator
@@ -46,9 +48,13 @@ from core.memory.knowledge_base import (
     KnowledgeBase, knowledge_base,
 )
 from core.memory.store import generate_id, now_iso
+from core.tools.base import tool_registry  # 导入即触发 builtin 工具注册（core/tools/__init__ 副作用）
 
 
 # ===== 7 段式提示词框架模板 =====
+
+# 工具调用最大轮次上限（防止模型死循环反复调工具占死 GPU / 上机演示卡死）
+MAX_TOOL_ITERATIONS = 5
 
 PROMPT_SECTIONS = [
     "identity",
@@ -323,10 +329,15 @@ class RoleBase(ABC):
 
     async def _call_llm(self, ctx: RoleContext) -> str:
         """
-        调用 LLM (非流式)
+        调用 LLM (非流式)，并闭环处理工具调用 (function calling)。
+
+        断点 A：把「角色被授权的工具 schema」通过 gateway 传给模型
+                (来自角色 role_pool.json 的 tools 白名单 → 注册表过滤)
+        断点 B：模型若返回 tool_calls，则逐个执行、把结果回填 messages、
+                再请求模型，直到模型不再要求调工具或达到最大轮次。
 
         :param ctx: 角色上下文
-        :return: LLM 响应
+        :return: LLM 最终文本响应
         """
         from core.llm.gateway import llm_gateway
 
@@ -334,13 +345,107 @@ class RoleBase(ABC):
         # 使用角色对应的 GPU 端口
         base_url = self._get_gpu_url()
 
-        result = await llm_gateway.chat(
-            messages,
-            temperature=0.7,
-            max_tokens=4096,
-            base_url=base_url,
+        # 兜底：确保内置工具已注册（core/tools/__init__ 导入副作用）
+        if not tool_registry.list_all():
+            import core.tools.builtin  # noqa: F401
+
+        # 断点 A：按角色授权白名单取出该角色可用的工具 schema
+        #   role_pool.json 的 tools 字段是授权白名单（权限控制举证材料），
+        #   注册表 get_available_tools() 已实现按白名单过滤，这里不绕过它。
+        agent_config = {"tools": {name: True for name in self.tool_names}}
+        tool_defs = tool_registry.get_tool_definitions(agent_config)
+        # 无工具授权时传 None，与历史行为完全一致（gateway 不会收到空 tools 数组）
+        tools_arg = tool_defs if tool_defs else None
+
+        return await self._run_tool_loop(
+            llm_gateway, messages, base_url, tools_arg, agent_config,
         )
-        return result["content"]
+
+    async def _run_tool_loop(
+        self,
+        gateway,
+        messages: list[dict],
+        base_url: str,
+        tools_arg,
+        agent_config: dict,
+    ) -> str:
+        """
+        工具调用闭环：循环执行模型要求的工具，直到模型不再要求或达到轮次上限。
+
+        容错要点：
+        - 模型返回格式不标准的 tool_calls（参数非合法 JSON、缺字段、未知工具名）
+          不能让整个对话崩掉 —— 解析失败降级为空参、未知工具返回「不存在」、
+          执行异常由注册表捕获，一律作为 tool 消息回填，让模型自行恢复。
+        - 达到 MAX_TOOL_ITERATIONS 上限后强制返回，避免模型死循环占死 GPU。
+        """
+        last_content = ""
+
+        for _ in range(MAX_TOOL_ITERATIONS):
+            try:
+                result = await gateway.chat(
+                    messages,
+                    temperature=0.7,
+                    max_tokens=4096,
+                    tools=tools_arg,
+                    base_url=base_url,
+                )
+            except Exception as e:
+                # LLM 调用本身异常：交还上一轮文本，不让工具循环吃掉错误
+                print(f"[Role:{self.id}] ⚠ 工具循环内 LLM 调用异常: {e}")
+                return last_content
+
+            content = result.get("content") or ""
+            last_content = content or last_content
+            tool_calls = result.get("tool_calls") or []
+
+            # 模型不再要求调工具 → 本轮就是最终答案
+            if not tool_calls:
+                return content
+
+            # 把 assistant 的 tool_calls 回写进 messages，作为下一轮上下文
+            messages.append({
+                "role": "assistant",
+                "content": content,
+                "tool_calls": [
+                    {
+                        "id": tc.get("id", ""),
+                        "type": "function",
+                        "function": {
+                            "name": tc.get("function", {}).get("name", ""),
+                            "arguments": tc.get("function", {}).get("arguments", "{}"),
+                        },
+                    }
+                    for tc in tool_calls
+                ],
+            })
+
+            # 逐个执行工具，结果以 role=tool 消息回填
+            for tc in tool_calls:
+                fn = tc.get("function", {})
+                name = fn.get("name", "")
+                raw_args = fn.get("arguments", "{}") or "{}"
+
+                # 容错：llama.cpp 可能返回格式不标准的 arguments
+                try:
+                    args = json.loads(raw_args) if isinstance(raw_args, str) else (raw_args or {})
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    args = {}
+                    print(f"[Role:{self.id}] ⚠ 工具参数 JSON 解析失败: {name} | 原值={raw_args!r}")
+
+                try:
+                    tool_result = await tool_registry.execute_tool(name, args, agent_config)
+                except Exception as e:
+                    tool_result = {"success": False, "error": f"工具执行未捕获异常: {e}"}
+
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.get("id", ""),
+                    "content": json.dumps(tool_result, ensure_ascii=False, default=str),
+                })
+
+        # 达到最大轮次仍未结束 —— 取最后一轮文本，避免无限循环占死 GPU
+        print(f"[Role:{self.id}] ⚠ 工具调用达到上限 {MAX_TOOL_ITERATIONS} 轮，强制结束")
+        return last_content
 
     async def _call_llm_stream(self, ctx: RoleContext) -> AsyncGenerator[str, None]:
         """调用 LLM (流式)"""
