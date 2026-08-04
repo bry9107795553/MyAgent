@@ -31,6 +31,7 @@
 """
 import json
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -42,6 +43,41 @@ from core.memory.store import (
 
 # 知识图谱文件路径
 KNOWLEDGE_PATH = MEMORY_ROOT / "knowledge.json"
+
+
+# ===== 方案 C-2: 知识保质期 (TTL) 辅助 =====
+_KNOWLEDGE_TTL_MONTHS = {
+    "technical": 6,    # 技术事实：6 个月
+    "security": 3,     # 安全情报：3 个月
+    "platform": 2,     # 平台/环境：2 个月
+    "permanent": None, # 用户偏好等：不过期
+}
+_TTL_DECAY = {  # 过期时置信度折扣（只降权不删除）
+    "technical": 0.5,
+    "security": 0.3,
+    "platform": 0.3,
+    "permanent": 1.0,
+}
+
+
+def _iso_to_dt(s: Optional[str]) -> Optional[datetime]:
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _compute_expires_at(created_at: str, knowledge_type: str) -> Optional[str]:
+    """由 created_at + TTL 计算 expires_at（permanent 返回 None）。"""
+    months = _KNOWLEDGE_TTL_MONTHS.get(knowledge_type, 6)
+    if months is None:
+        return None
+    dt = _iso_to_dt(created_at)
+    if not dt:
+        return None
+    return (dt + timedelta(days=months * 30)).isoformat()
 
 
 class KnowledgeBase:
@@ -96,6 +132,7 @@ class KnowledgeBase:
         object: str,
         source_role: str = "compressor",
         confidence: float = 0.5,
+        knowledge_type: str = "technical",
     ) -> dict:
         """
         添加一条知识三元组 (自动去重合并)
@@ -105,6 +142,7 @@ class KnowledgeBase:
         :param object: 客体实体
         :param source_role: 来源角色
         :param confidence: 初始置信度
+        :param knowledge_type: 知识类型 technical/security/platform/permanent（决定 TTL）
         :return: 创建或更新的三元组
         """
         # 规范化实体名
@@ -127,6 +165,7 @@ class KnowledgeBase:
             return existing
 
         # 创建新三元组
+        created = now_iso()
         triple = {
             "id": generate_id("triple"),
             "subject": subject,
@@ -134,9 +173,13 @@ class KnowledgeBase:
             "object": object,
             "source_role": source_role,
             "confidence": confidence,
-            "created_at": now_iso(),
-            "updated_at": now_iso(),
+            "created_at": created,
+            "updated_at": created,
             "occurrences": 1,
+            # ===== 方案 C-2 新增 3 键（老三元组无此键，由 _compute_staleness 兜底）=====
+            "knowledge_type": knowledge_type,
+            "expires_at": _compute_expires_at(created, knowledge_type) or "",
+            "staleness": 0.0,
         }
         self._data["triples"].append(triple)
 
@@ -204,8 +247,10 @@ class KnowledgeBase:
             score = sum(1 for kw in keywords if kw in text)
 
             if score > 0:
-                # 置信度加权: 相关度 × 置信度 × 出现次数
-                weighted_score = score * triple["confidence"] * (1 + 0.1 * triple.get("occurrences", 1))
+                # 方案 C-2: 乘以新鲜度系数（过期知识降权，staleness≥1 时系数→0）
+                freshness = max(0.0, 1.0 - self._compute_staleness(triple))
+                # 置信度加权: 相关度 × 置信度 × 出现次数 × 新鲜度
+                weighted_score = score * triple["confidence"] * (1 + 0.1 * triple.get("occurrences", 1)) * freshness
                 scored.append((weighted_score, triple))
 
         scored.sort(key=lambda x: -x[0])
@@ -317,12 +362,79 @@ class KnowledgeBase:
         # 格式化为自然语言注入上下文
         facts = []
         for t in triples:
-            facts.append(f"• {t['subject']} {t['relation']} {t['object']}")
+            # 方案 C-2: 过期三元组加"⚠ 可能已过期"前缀
+            prefix = "⚠ 可能已过期：" if self._compute_staleness(t) >= 1.0 else ""
+            facts.append(f"{prefix}• {t['subject']} {t['relation']} {t['object']}")
 
         return [{
             "role": "system",
             "content": f"[已知事实 (跨会话)]\n" + "\n".join(facts),
         }]
+
+    # ------------------------------------------------------------------ #
+    # 方案 C-2: 知识保质期 (TTL) — 全部为新增方法
+    # ------------------------------------------------------------------ #
+
+    def _compute_staleness(self, triple: dict) -> float:
+        """
+        计算 staleness (0.0=新鲜, ≥1.0=完全过期)。
+        老三元组无 knowledge_type/expires_at 时按 technical 兜底并以 created_at 回算。
+        """
+        ktype = triple.get("knowledge_type", "technical")
+        if ktype == "permanent":
+            return 0.0
+
+        created = triple.get("created_at")
+        expires = triple.get("expires_at")
+        if not expires and created:
+            expires = _compute_expires_at(created, ktype)
+
+        now = datetime.now(timezone.utc)
+        cdt = _iso_to_dt(created) if created else None
+        exp_dt = _iso_to_dt(expires) if expires else None
+
+        if cdt and exp_dt:
+            total = (exp_dt - cdt).days or 1
+            elapsed = (now - cdt).days
+            return max(0.0, elapsed / total)
+        if cdt:
+            months = _KNOWLEDGE_TTL_MONTHS.get(ktype, 6) or 6
+            return max(0.0, (now - cdt).days / (months * 30))
+        return 0.0
+
+    def sweep_expired(self) -> int:
+        """
+        清扫过期三元组：过期只**降权**不删除，置信度按类型折扣并刷新 updated_at。
+        需显式调用（不会自动执行）。
+        :return: 被降权的三元组数量
+        """
+        changed = 0
+        for t in self._data["triples"]:
+            if self._compute_staleness(t) >= 1.0:
+                ktype = t.get("knowledge_type", "technical")
+                decay = _TTL_DECAY.get(ktype, 0.5)
+                t["confidence"] = round(t["confidence"] * decay, 4)
+                t["updated_at"] = now_iso()
+                changed += 1
+        if changed:
+            self._save()
+        return changed
+
+    def get_freshness_report(self) -> list[dict]:
+        """供演示面板展示的知识新鲜度报表。"""
+        report = []
+        for t in self._data["triples"]:
+            s = self._compute_staleness(t)
+            status = "fresh" if s < 0.8 else ("expiring" if s < 1.0 else "expired")
+            report.append({
+                "subject": t.get("subject"),
+                "relation": t.get("relation"),
+                "object": t.get("object"),
+                "knowledge_type": t.get("knowledge_type", "technical"),
+                "staleness": round(s, 3),
+                "status": status,
+            })
+        return report
 
     # ------------------------------------------------------------------ #
     # 维护

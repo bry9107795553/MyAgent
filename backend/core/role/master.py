@@ -498,6 +498,9 @@ class MasterRole(RoleBase):
         # 动态规则: cleanup_hook — 开发类任务结束后自动追加 cleaner
         pipeline = self._apply_cleanup_hook(pipeline, wg_id)
 
+        # 动态规则: experience_eval_hook — 开发类任务收尾后追加经验评估员（方案 C-4，按工作组 members 开关）
+        pipeline = self._apply_experience_eval_hook(workgroup, wg_id)
+
         # 按 step 编号排序
         sorted_pipeline = sorted(pipeline, key=lambda s: s.get("step", 0))
 
@@ -680,6 +683,39 @@ class MasterRole(RoleBase):
 
         print(f"[Master] 动态规则 cleanup_hook: 已追加 cleaner 步骤")
         return pipeline + [cleaner_step]
+
+    def _apply_experience_eval_hook(self, workgroup: dict, wg_id: str) -> list[dict]:
+        """
+        动态规则: experience_eval_hook — 开发类工作组收尾后追加经验评估员（方案 C-4）。
+        仅当 workgroup 的 members 显式列入 "experience_evaluator" 时才生效（按工作组开关，零侵入）。
+        """
+        pipeline = workgroup.get("pipeline", [])
+        if not pipeline:
+            return pipeline
+
+        dev_wg_ids = {"dev_full", "dev_code_review", "dev_tech_debt"}
+        if wg_id not in dev_wg_ids:
+            return pipeline
+
+        members = set(workgroup.get("members", []))
+        if "experience_evaluator" not in members:
+            return pipeline
+
+        if pipeline[-1].get("role") == "experience_evaluator":
+            return pipeline  # 已存在
+
+        last_step_num = max(s.get("step", 0) for s in pipeline)
+        eval_step = {
+            "step": last_step_num + 1,
+            "role": "experience_evaluator",
+            "action": "任务收尾后评估被注入经验的效用，审计知识新鲜度，淘汰失效记忆",
+            "input_from": f"step_{last_step_num}",
+            "output_to": "user",
+            "parallel_with": [],
+            "condition": "",
+        }
+        print(f"[Master] 动态规则 experience_eval_hook: 已追加 experience_evaluator 步骤")
+        return pipeline + [eval_step]
 
     @staticmethod
     def _extract_step_num(step_str: str) -> Optional[int]:

@@ -164,6 +164,12 @@ class ExperienceRecord:
     failed_attempts: List[str]  # 失败过的尝试及原因
     timestamp: str = ""         # 记录时间 (ISO)
     success_count: int = 1      # 该方法成功的次数（自动递增）
+    # ===== 方案 C-1 新增 5 字段（纯加法，老 JSON 缺字段自动取默认值）=====
+    utility_score: float = 0.0  # 效用分（可正可负），由经验评估员投票决定
+    applied_count: int = 0      # 被注入并实际采用的次数
+    last_applied: str = ""      # 最近一次被采用时间 (ISO)
+    evaluator_notes: str = ""   # 经验评估员的判语
+    status: str = "active"      # active | probation | archived
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -315,8 +321,8 @@ class ExperienceManager:
                     matched.append(exp)
                     break
 
-        # 按成功次数降序
-        matched.sort(key=lambda e: e.success_count, reverse=True)
+        # 方案 C-1: 注入排序改为 效用分降序 → 成功次数降序（负分经验自动靠后）
+        matched.sort(key=lambda e: (-e.utility_score, -e.success_count))
         return matched
 
     def get_injection(self, user_message: str) -> str:
@@ -328,7 +334,8 @@ class ExperienceManager:
         :param user_message: 用户当前消息
         :return: 经验注入文本（Markdown 格式），无匹配时返回空字符串
         """
-        experiences = self.find(user_message)
+        # 方案 C-1: 过滤已归档（utility_score ≤ −3）经验，不注入
+        experiences = [e for e in self.find(user_message) if e.status != "archived"]
         if not experiences:
             return ""
 
@@ -377,6 +384,74 @@ class ExperienceManager:
             "experience_types": self.get_all_types(),
             "storage_dir": self._storage_dir,
         }
+
+    # ------------------------------------------------------------------ #
+    # 方案 C-1: 效用评分 / 淘汰 / 演示报表（全部为新增方法）
+    # ------------------------------------------------------------------ #
+
+    def _rewrite_task_type(self, task_type: str):
+        """把当前内存中该 task_type 的全部经验回写磁盘（用于投票后持久化）"""
+        exp_dir = self._get_experience_dir()
+        exp_dir.mkdir(parents=True, exist_ok=True)
+        recs = [e for e in self._experiences if e.task_type == task_type]
+        fp = exp_dir / f"{task_type}.json"
+        fp.write_text(
+            json.dumps([r.to_dict() for r in recs], ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    def vote(self, record_id: str, delta: int, note: str = "") -> Optional[ExperienceRecord]:
+        """
+        方案 C-1: 经验评估员对一条经验投票。
+        record_id 以 task_type 定位（演示中以 task_type 标识一条经验）。
+
+        :param record_id: 经验 task_type
+        :param delta: +1（成功）/-1（失败）/-2（误导）或 0
+        :param note: 评估员判语
+        :return: 被投票的经验；未找到返回 None
+        """
+        target = next((e for e in self._experiences if e.task_type == record_id), None)
+        if not target:
+            return None
+
+        target.utility_score += delta
+        target.evaluator_notes = note
+        if target.utility_score <= -3:
+            target.status = "archived"          # 立即出局，不再注入
+        elif target.utility_score < 0:
+            target.status = "probation"         # 察看期，降权注入
+        else:
+            target.status = "active"
+
+        self._rewrite_task_type(target.task_type)
+        return target
+
+    def _evict_if_full(self, task_type: str, capacity: int = 15):
+        """
+        方案 C-1: 单 task_type 池容量上限。超出时淘汰 utility_score 最低的一条（标 archived）。
+        """
+        pool = [e for e in self._experiences if e.task_type == task_type]
+        if len(pool) <= capacity:
+            return
+        worst = min(pool, key=lambda e: e.utility_score)
+        worst.status = "archived"
+        self._rewrite_task_type(task_type)
+
+    def get_utility_report(self) -> list[dict]:
+        """
+        方案 C-1: 供演示面板展示的效用报表。
+        按 utility_score 降序，标注状态。
+        """
+        return [
+            {
+                "task_type": e.task_type,
+                "utility_score": e.utility_score,
+                "status": e.status,
+                "success_count": e.success_count,
+                "evaluator_notes": e.evaluator_notes,
+            }
+            for e in sorted(self._experiences, key=lambda e: -e.utility_score)
+        ]
 
 
 class Secretary:
