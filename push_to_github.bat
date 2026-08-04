@@ -81,12 +81,30 @@ echo [OK] Remote added: %REPOURL%
 echo.
 
 :DOPUSH
-REM ---------- Step 5: detect branch ----------
+REM ---------- Step 5: detect & normalize branch ----------
 set "BRANCH="
 for /f "delims=" %%b in ('git rev-parse --abbrev-ref HEAD 2^>nul') do set "BRANCH=%%b"
-if "%BRANCH%"=="" set "BRANCH=main"
+if "%BRANCH%"=="" set "BRANCH=master"
 echo [INFO] Current branch: %BRANCH%
+
+REM Normalize to 'main' so it matches GitHub's default branch
+if "%BRANCH%"=="master" (
+    git branch -m master main
+    set "BRANCH=main"
+    echo [OK] Renamed local branch to 'main'.
+)
 echo.
+
+REM If the remote already has a 'main' branch (e.g. GitHub auto-added a
+REM README when the repo was created), merge it in while KEEPING all your
+REM local project files. This avoids the "fetch first / non-fast-forward"
+REM rejection without you having to delete the repo on the web.
+set "REMOTE_HAS_MAIN="
+for /f "delims=" %%r in ('git ls-remote --heads origin main 2^>nul') do set "REMOTE_HAS_MAIN=%%r"
+if defined REMOTE_HAS_MAIN (
+    echo [INFO] Remote already has content; merging (your files win on conflict)...
+    git pull origin main --allow-unrelated-histories -X ours --no-edit
+)
 
 echo ============================================================
 echo   Pushing now...
@@ -97,7 +115,7 @@ echo   This is normal and only happens the first time.
 echo ============================================================
 echo.
 
-git push -u origin %BRANCH%
+git push -u origin main
 
 if errorlevel 1 (
     echo.
