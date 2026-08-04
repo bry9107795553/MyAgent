@@ -240,15 +240,31 @@ fi
 # ============================================================
 # Step 3: 安装编译工具
 # ============================================================
-step "3/9" "安装编译依赖"
+step "3/9" "安装运行依赖（轻量）"
 
-sudo apt-get update -qq
-sudo apt-get install -y -qq \
-    build-essential cmake git curl wget nginx \
-    libssl-dev libffi-dev libcurl4-openssl-dev \
-    python3-venv 2>/dev/null || true
+# --- 3a. 屏蔽不可达的 apt 源 ---------------------------------
+# AMD 官方容器镜像内置了公司内网源 compute-artifactory.amd.com，
+# 公网环境下 DNS 解析失败，apt-get update 会在此长时间阻塞（数分钟）。
+# ROCm 本身已随镜像预装，无需该源，直接禁用以避免卡顿。
+for f in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+    [ -f "$f" ] || continue
+    if grep -qi "compute-artifactory.amd.com" "$f" 2>/dev/null; then
+        sudo mv "$f" "$f.disabled" 2>/dev/null || true
+        echo "  ✓ 已禁用不可达内网源: $(basename "$f")"
+    fi
+done
 
-echo "  ✓ 编译工具已安装"
+# --- 3b. 只装真正需要的运行时依赖 ------------------------------
+# 使用官方预编译 llama.cpp 时不需要 build-essential / cmake，
+# 那些包（~500MB）留到 Step 4 回退编译分支时才按需安装。
+APT_OPTS="-o Acquire::Retries=1 -o Acquire::http::Timeout=15 -o Acquire::ftp::Timeout=15"
+# shellcheck disable=SC2086
+sudo apt-get $APT_OPTS update -qq 2>/dev/null || warn "apt update 有源不可达，已忽略"
+# shellcheck disable=SC2086
+sudo apt-get $APT_OPTS install -y -qq \
+    ca-certificates curl wget git nginx python3-venv 2>/dev/null || true
+
+echo "  ✓ 运行依赖就绪（编译工具链按需延后安装）"
 
 # ============================================================
 # Step 4: 获取 llama.cpp (优先官方 ROCm 预编译包，回退源码编译)
@@ -300,6 +316,9 @@ else
 
     if [ "$PREBUILT_OK" -eq 0 ]; then
         warn "回退到源码编译（约 10-15 分钟，编译期屏幕长时间无输出属正常）"
+        echo "  → 安装编译工具链（仅回退路径需要）..."
+        sudo apt-get $APT_OPTS install -y -qq \
+            build-essential cmake libssl-dev libffi-dev libcurl4-openssl-dev 2>/dev/null || true
         if [ ! -d "$LLAMA_CPP_DIR/.git" ]; then
             rm -rf "$LLAMA_CPP_DIR"
             git clone --depth 1 https://github.com/ggml-org/llama.cpp.git "$LLAMA_CPP_DIR"
