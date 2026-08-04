@@ -358,7 +358,7 @@ tail -f /tmp/backend.log  # FastAPI logs
 
 | Name | Role | Email |
 |------|------|-------|
-| [Team Member 1] | [Role] | [Email] |
+| bry9107795553 | Developer & Author (solo entry) | 118060862@qq.com |
 
 ---
 
