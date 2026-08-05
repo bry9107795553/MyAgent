@@ -2,44 +2,71 @@
   <div class="agent-platform">
     <!-- ===== 左栏: 系统状态 + 智能体 + 工作组 + 角色 ===== -->
     <aside class="left-panel">
-      <div class="sys-bar" :class="{ online: llmOnline }" @click="showSys=!showSys">
-        <span class="sys-dot"></span>
-        <span class="sys-text">{{ llmOnline ? modelName : '离线' }}</span>
-        <span class="sys-arrow">{{ showSys ? '▴' : '▾' }}</span>
-      </div>
-      <div v-if="showSys" class="sys-detail">
-        <div class="kv"><span>模型</span><span>{{ modelName }}</span></div>
-        <div class="kv"><span>角色</span><span>{{ roles.length }}</span></div>
-        <div class="kv"><span>工作组</span><span>{{ workgroups.length }}</span></div>
-      </div>
-
-      <div class="section">
-        <div class="shead">智能体</div>
-        <div v-for="a in agents" :key="a.agent_id" class="a-item" :class="{ active: currentAgent===a.agent_id }"
-             @click="selectAgent(a.agent_id)">
-          <span class="a-icon">🤖</span>
-          <div><div class="a-name">{{ a.name }}</div><div class="a-desc">{{ a.description }}</div></div>
+      <!-- 系统状态卡 -->
+      <div class="system-card" :class="{ online: llmOnline }">
+        <div class="system-status">
+          <div class="status-indicator"></div>
+          <div class="status-info">
+            <div class="status-label">{{ llmOnline ? '在线' : '离线' }}</div>
+            <div class="status-model">{{ modelName }}</div>
+          </div>
         </div>
+        <div class="system-stats" v-if="showSys">
+          <div class="stat">
+            <span class="stat-num">{{ roles.length }}</span>
+            <span class="stat-label">角色</span>
+          </div>
+          <div class="stat">
+            <span class="stat-num">{{ workgroups.length }}</span>
+            <span class="stat-label">工作组</span>
+          </div>
+          <div class="stat">
+            <span class="stat-num">{{ agents.length }}</span>
+            <span class="stat-label">智能体</span>
+          </div>
+        </div>
+        <button class="expand-btn" @click="showSys=!showSys">
+          <svg :class="{rotated: showSys}" width="12" height="12" viewBox="0 0 12 12">
+            <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          </svg>
+        </button>
       </div>
 
-      <div class="section">
-        <div class="shead" @click="wgOpen=!wgOpen">工作组 {{ wgOpen?'▴':'▾' }}</div>
-        <div v-if="wgOpen" class="slist">
-          <div v-for="wg in workgroups" :key="wg.id" class="wg-chip" @click="triggerWg(wg)">
-            <div class="wg-top"><span>{{ wg.name }}</span><span class="steps">{{ wg.pipeline_steps }}步</span></div>
-            <div class="wg-kw">{{ (wg.trigger_keywords||[]).slice(0,3).join(' · ') }}</div>
+      <!-- 智能体 -->
+      <div class="sidebar-section">
+        <div class="section-header">
+          <h3>智能体</h3>
+          <span class="section-badge">{{ agents.length }}</span>
+        </div>
+        <div class="agent-list">
+          <div v-for="a in agents" :key="a.agent_id" class="agent-card"
+               :class="{ active: currentAgent===a.agent_id }"
+               @click="selectAgent(a.agent_id)">
+            <div class="agent-avatar">🤖</div>
+            <div class="agent-info">
+              <div class="agent-name">{{ a.name }}</div>
+              <div class="agent-desc">{{ a.description }}</div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="section" style="flex:1">
-        <div class="shead" @click="roleOpen=!roleOpen">角色 ({{ roles.length }}) {{ roleOpen?'▴':'▾' }}</div>
-        <div v-if="roleOpen" class="slist">
-          <div v-for="(grs,grp) in roleGroups" :key="grp">
-            <div class="glabel">{{ groupLabels[grp]||grp }}</div>
-            <div v-for="r in grs" :key="r.id" class="r-chip">
-              <span class="rdot" :class="'g-'+r.gpu_affinity"></span>
-              <span class="rname">{{ r.name }}</span>
+      <!-- 工作组 -->
+      <div class="sidebar-section">
+        <div class="section-header" @click="wgOpen=!wgOpen">
+          <h3>工作组</h3>
+          <span class="section-badge">{{ workgroups.length }}</span>
+          <svg :class="{rotated: wgOpen}" width="12" height="12" viewBox="0 0 12 12" class="section-arrow">
+            <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          </svg>
+        </div>
+        <div v-if="wgOpen" class="workgroup-list">
+          <div v-for="wg in workgroups" :key="wg.id" class="workgroup-card" @click="triggerWg(wg)">
+            <div class="wg-name">{{ wg.name }}</div>
+            <div class="wg-desc">{{ wg.description || '自动编排多角色协作' }}</div>
+            <div class="wg-footer">
+              <span class="wg-steps">{{ wg.pipeline_steps }} 步</span>
+              <span class="wg-kws">{{ (wg.trigger_keywords||[]).slice(0,2).join(' · ') }}</span>
             </div>
           </div>
         </div>
@@ -49,92 +76,182 @@
     <!-- ===== 中栏: 对话 ===== -->
     <div class="chat-col">
       <div class="chat-header">
-        <div class="chat-title">
-          <span v-if="currentConversation">对话 #{{ currentConversation.id }}</span>
-          <span v-else style="color: var(--text-2)">未命名对话</span>
-          <span v-if="messages.length" class="msg-count">{{ messages.length }}条</span>
+        <div class="chat-title-area">
+          <h2 class="chat-title">
+            <span v-if="currentConversation">{{ currentConversation.title || '新对话' }}</span>
+            <span v-else class="title-placeholder">未命名对话</span>
+          </h2>
+          <span v-if="messages.length" class="msg-count">{{ messages.length }} 条消息</span>
         </div>
         <div class="chat-actions">
-          <button class="icon-btn" @click="newConversation" title="新建对话">+ 新建</button>
-          <button class="icon-btn" @click="showHistory = !showHistory" title="对话历史">📚 历史</button>
-          <button class="icon-btn danger" @click="deleteCurrentConversation" :disabled="!currentConversation" title="删除当前对话">🗑 删除</button>
+          <button class="action-btn" @click="newConversation" title="新建对话">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <span>新建</span>
+          </button>
+          <button class="action-btn" @click="showHistory = !showHistory" title="对话历史">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M8 4v4l2 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <span>历史</span>
+          </button>
+          <button class="action-btn danger" @click="deleteCurrentConversation" :disabled="!currentConversation" title="删除">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M3 4h10M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1m-7 0v9a1 1 0 001 1h6a1 1 0 001-1V4" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            <span>删除</span>
+          </button>
         </div>
       </div>
 
       <!-- 对话历史侧边面板 -->
-      <div v-if="showHistory" class="history-panel">
-        <div class="history-head">
-          <span>对话历史</span>
-          <button class="icon-btn" @click="showHistory = false">×</button>
+      <transition name="slide">
+        <div v-if="showHistory" class="history-panel">
+          <div class="history-head">
+            <h3>对话历史</h3>
+            <button class="close-btn" @click="showHistory = false">×</button>
+          </div>
+          <div v-if="conversationList.length === 0" class="history-empty">
+            <div class="empty-icon">📭</div>
+            <p>还没有历史对话</p>
+          </div>
+          <div v-for="conv in conversationList" :key="conv.id" class="history-item"
+               :class="{active: currentConversation?.id === conv.id}"
+               @click="loadConversation(conv)">
+            <div class="conv-title">{{ conv.title || '未命名对话' }}</div>
+            <div class="conv-meta">{{ conv.message_count || 0 }} 条 · {{ formatTime(conv.updated_at) }}</div>
+          </div>
         </div>
-        <div v-if="conversationList.length === 0" class="history-empty">还没有历史对话</div>
-        <div v-for="conv in conversationList" :key="conv.id" class="history-item"
-             :class="{active: currentConversation?.id === conv.id}"
-             @click="loadConversation(conv)">
-          <div class="conv-title">{{ conv.title || '未命名对话' }}</div>
-          <div class="conv-meta">{{ conv.message_count || 0 }}条 · {{ formatTime(conv.updated_at) }}</div>
+      </transition>
+
+      <div class="messages" ref="msgEl">
+        <div v-if="messages.length===0 && !streaming" class="empty-state">
+          <div class="empty-icon">💬</div>
+          <h2 class="empty-title">开始你的 AI 对话</h2>
+          <p class="empty-sub">选择智能体或工作组，输入消息开始</p>
+          <div class="quick-pills">
+            <button class="pill primary" @click="sendQuick('我想要做程序开发')">
+              <span class="pill-icon">⚡</span>
+              <span>程序开发</span>
+            </button>
+            <button class="pill" @click="sendQuick('写一份AMD GPU市场分析报告')">
+              <span class="pill-icon">📊</span>
+              <span>写报告</span>
+            </button>
+            <button class="pill" @click="sendQuick('审查代码：function add(a,b){return a+b}')">
+              <span class="pill-icon">🔍</span>
+              <span>代码审查</span>
+            </button>
+            <button class="pill" @click="sendQuick('帮我写一封工作邮件')">
+              <span class="pill-icon">✉️</span>
+              <span>写邮件</span>
+            </button>
+          </div>
+        </div>
+
+        <div v-for="(m,i) in messages" :key="i" class="msg" :class="m.role">
+          <div class="msg-avatar" v-if="m.role === 'assistant'">🤖</div>
+          <div class="msg-content">
+            <div class="bubble" v-html="md(m.content)"></div>
+            <div v-if="m.meta?.workgroup" class="msg-meta">
+              <span class="meta-tag">
+                <span class="meta-icon">⚙️</span>
+                {{ m.meta.workgroup }}
+              </span>
+              <span class="meta-roles" v-if="m.meta.roles_used?.length">
+                <span class="meta-roles-text">{{ m.meta.roles_used.join(' → ') }}</span>
+                <span class="meta-badge">{{ m.meta.roles_used.length }} 步完成</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="streaming" class="msg assistant">
+          <div class="msg-avatar">🤖</div>
+          <div class="msg-content">
+            <div class="bubble streaming">
+              <span class="bubble-text">{{ buf }}</span>
+              <span class="cursor-blink">▊</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="messages" ref="msgEl">
-        <div v-if="messages.length===0 && !streaming" class="empty">
-          <div class="empty-icon">💬</div>
-          <div class="empty-title">MyAgent 就绪</div>
-          <div class="empty-sub">输入消息开始对话，工作组自动触发</div>
-          <div class="pills">
-            <span class="pill" @click="sendQuick('我想要做程序开发')">程序开发</span>
-            <span class="pill" @click="sendQuick('审查代码')">代码审查</span>
-            <span class="pill" @click="sendQuick('做界面设计')">界面设计</span>
-            <span class="pill" @click="sendQuick('翻译一段文本')">翻译</span>
-          </div>
-        </div>
-        <div v-for="(m,i) in messages" :key="i" class="msg" :class="m.role">
-          <div class="bubble" v-html="md(m.content)"></div>
-          <div v-if="m.meta?.workgroup" class="msg-meta">
-            <span class="mtag">{{ m.meta.workgroup }}</span>
-            <span class="mroles" v-if="m.meta.roles_used?.length">{{ m.meta.roles_used.join(' → ') }}</span>
-            <span class="done-badge" v-if="m.meta.roles_used?.length">✓ {{ m.meta.roles_used.length }}步完成</span>
-          </div>
-        </div>
-        <div v-if="streaming" class="msg assistant"><div class="bubble streaming">{{ buf }}<span class="c">▊</span></div></div>
-      </div>
       <div class="input-bar">
-        <input v-model="txt" class="inp" placeholder="输入消息或关键词触发工作组..."
-               @keyup.enter="send" :disabled="streaming"/>
-        <button class="send-btn" @click="send" :disabled="streaming||!txt">{{ streaming?'…':'发送' }}</button>
+        <div class="input-wrap">
+          <textarea
+            v-model="txt"
+            class="input"
+            placeholder="发消息、问问题、或输入关键词触发工作组..."
+            rows="1"
+            @keydown.enter.exact.prevent="send"
+            @input="autoResize"
+            ref="inputEl"
+            :disabled="streaming"
+          />
+          <button class="send-btn" @click="send" :disabled="streaming || !txt.trim()">
+            <svg v-if="!streaming" width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M2 9l14-7-5 14-2-6-7-1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+            <div v-else class="loading-dots">
+              <span></span><span></span><span></span>
+            </div>
+          </button>
+        </div>
+        <div class="input-hint">
+          <span>Enter 发送 · Shift+Enter 换行</span>
+        </div>
       </div>
     </div>
 
     <!-- ===== 右栏: 产出区 ===== -->
     <aside class="right-panel">
       <div class="rhead">
-        <span v-if="pipelineActive" class="rhead-badge active">执行中</span>
-        <span v-else-if="lastPipeline.length" class="rhead-badge done">已完成</span>
-        <span v-else class="rhead-badge idle">等待中</span>
-        <span class="rhead-title">产出区</span>
+        <div class="rhead-status">
+          <span v-if="pipelineActive" class="rhead-dot active"></span>
+          <span v-else-if="lastPipeline.length" class="rhead-dot done"></span>
+          <span v-else class="rhead-dot idle"></span>
+          <span class="rhead-label">
+            {{ pipelineActive ? '执行中' : lastPipeline.length ? '已完成' : '等待中' }}
+          </span>
+        </div>
+        <h3 class="rhead-title">产出区</h3>
       </div>
+
       <div class="rbody" v-if="pipelineActive || lastPipeline.length">
-        <div class="pipeline-steps">
+        <div class="pipeline">
           <div v-for="(step, idx) in displaySteps" :key="idx" class="step"
                :class="{ done:step.s==='done', active:step.s==='running', fail:step.s==='fail' }"
                @click="selectedStep = idx">
-            <div class="step-dot">
-              <span v-if="step.s==='done'">✓</span>
-              <span v-else-if="step.s==='running'">◉</span>
-              <span v-else-if="step.s==='fail'">✗</span>
-              <span v-else>{{ idx+1 }}</span>
+            <div class="step-indicator">
+              <svg v-if="step.s==='done'" width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M2 7l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              <div v-else-if="step.s==='running'" class="pulse-dot"></div>
+              <svg v-else-if="step.s==='fail'" width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M3 3l8 8M3 11l8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              <span v-else class="step-num">{{ idx+1 }}</span>
             </div>
             <div class="step-info">
               <div class="step-role">{{ step.role }}</div>
-              <div class="step-status">{{ step.s==='done'?'完成':step.s==='running'?'执行中…':step.s==='fail'?'失败':'等待' }}</div>
+              <div class="step-status">
+                {{ step.s==='done' ? '完成' : step.s==='running' ? '执行中…' : step.s==='fail' ? '失败' : '等待' }}
+              </div>
             </div>
           </div>
         </div>
+
         <div v-if="selectedStep!==null && displaySteps[selectedStep]?.output" class="step-detail">
-          <div class="detail-head">{{ displaySteps[selectedStep].role }} · 产出
+          <div class="detail-head">
+            <span class="detail-role">{{ displaySteps[selectedStep].role }}</span>
             <button v-if="hasHtmlCode(displaySteps[selectedStep].output)"
-              class="btn-preview-html"
-              @click="previewHtml(displaySteps[selectedStep].output)">{{ showPreview ? '📄 看源码' : '🌐 预览' }}</button>
+                    class="detail-action"
+                    @click="previewHtml(displaySteps[selectedStep].output)">
+              {{ showPreview ? '📄 看源码' : '🌐 预览' }}
+            </button>
           </div>
           <div v-if="showPreview && htmlContent" class="html-preview-frame">
             <iframe :srcdoc="htmlContent" sandbox="allow-scripts" class="preview-iframe"></iframe>
@@ -142,10 +259,16 @@
           <div v-else class="detail-body" v-html="md(displaySteps[selectedStep].output)"></div>
         </div>
       </div>
-      <div class="rbody empty-r" v-else>
-        <div class="empty-r-icon">📋</div>
-        <div class="empty-r-text">工作组产出将在这里展示</div>
-        <div class="empty-r-sub">发送「程序开发」「代码审查」等关键词触发</div>
+
+      <div class="rbody empty" v-else>
+        <div class="empty-illustration">
+          <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+            <rect x="8" y="14" width="48" height="40" rx="4" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 3"/>
+            <path d="M20 28h24M20 36h16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="empty-r-text">工作组产出将在这里展示</p>
+        <p class="empty-r-sub">发送「程序开发」「代码审查」等关键词触发</p>
       </div>
     </aside>
   </div>
@@ -157,23 +280,61 @@ import {marked} from 'marked'
 
 // ---- state ----
 const agents=ref([]),currentAgent=ref(''),messages=ref([]),txt=ref('')
-const streaming=ref(false),buf=ref(''),msgEl=ref(null),lastMeta=ref(null)
-const llmOnline=ref(false),modelName=ref('Qwen2.5-14B'),showSys=ref(false)
-const roles=ref([]),workgroups=ref([]),wgOpen=ref(true),roleOpen=ref(false)
+const streaming=ref(false),buf=ref(''),msgEl=ref(null),inputEl=ref(null),lastMeta=ref(null)
+const llmOnline=ref(false),modelName=ref('Qwen3-30B-A3B'),showSys=ref(false)
+const roles=ref([]),workgroups=ref([]),wgOpen=ref(true)
+
+// pipeline output panel
+const pipelineActive=ref(false)
+const pipelineSteps=ref([])
+const lastPipeline=ref([])
+const selectedStep=ref(null)
+
+const groupLabels={general:'通用',dev:'开发团队',logistics:'后勤',management:'管理'}
+const roleGroups=computed(()=>{
+  const g={};roles.value.forEach(r=>{const c=r.group||'general';(g[c]=g[c]||[]).push(r)});return g
+})
+const displaySteps = computed(() => pipelineActive.value ? pipelineSteps.value : lastPipeline.value)
+
+function md(t){try{return marked(t||'')}catch{return t||''}}
+
+// ---- HTML 预览 ----
+const showPreview = ref(false)
+const htmlContent = ref('')
+
+function hasHtmlCode(text) {
+  return /<(!DOCTYPE|html|head|body|div|script|style)/i.test(text)
+}
+function extractHtml(text) {
+  const match = text.match(/```(?:html)?\s*\n?([\s\S]*?)```/)
+  if (match) return match[1]
+  if (text.trim().startsWith('<')) {
+    const lines = text.split('\n')
+    const start = lines.findIndex(l => l.trim().startsWith('<!') || l.trim().startsWith('<html') || l.trim().startsWith('<'))
+    if (start >= 0) return lines.slice(start).join('\n')
+  }
+  return text
+}
+function previewHtml(text) {
+  if (showPreview.value) {
+    showPreview.value = false
+    htmlContent.value = ''
+  } else {
+    htmlContent.value = extractHtml(text)
+    showPreview.value = true
+  }
+}
 
 // ---- 对话管理 ----
-const currentConversation=ref(null)  // 当前对话 {id, title, messages, ...}
-const conversationList=ref([])      // 历史对话列表
-const showHistory=ref(false)         // 是否显示历史面板
+const currentConversation=ref(null)
+const conversationList=ref([])
+const showHistory=ref(false)
 const STORAGE_KEY = 'myagent_conversations'
 
-// 创建新对话
 function newConversation() {
-  // 保存当前
   if (currentConversation.value && messages.value.length > 0) {
     saveCurrentToStorage()
   }
-  // 新建
   const conv = {
     id: Date.now().toString(36),
     title: '新对话 ' + new Date().toLocaleTimeString(),
@@ -190,7 +351,6 @@ function newConversation() {
   refreshConversationList()
 }
 
-// 保存当前到 localStorage
 function saveCurrentToStorage() {
   if (!currentConversation.value) return
   currentConversation.value.messages = [...messages.value]
@@ -213,13 +373,13 @@ function refreshConversationList() {
 }
 
 function loadConversation(conv) {
-  // 保存当前
   if (currentConversation.value && currentConversation.value.id !== conv.id && messages.value.length > 0) {
     saveCurrentToStorage()
   }
   currentConversation.value = { ...conv }
   messages.value = [...(conv.messages || [])]
   showHistory.value = false
+  nextTick(scroll)
 }
 
 function deleteCurrentConversation() {
@@ -238,62 +398,17 @@ function formatTime(iso) {
   return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-// pipeline output panel
-const pipelineActive=ref(false)
-const pipelineSteps=ref([])      // {role, status: 'pending'|'running'|'done'|'fail', output}
-const lastPipeline=ref([])
-const selectedStep=ref(null)
-
-const groupLabels={general:'通用',dev:'开发团队',logistics:'后勤',management:'管理'}
-const roleGroups=computed(()=>{
-  const g={};roles.value.forEach(r=>{const c=r.group||'general';(g[c]=g[c]||[]).push(r)});return g
-})
-const displaySteps = computed(() => pipelineActive.value ? pipelineSteps.value : lastPipeline.value)
-
-function md(t){try{return marked(t||'')}catch{return t||''}}
-
-// ---- HTML 预览 ----
-const showPreview = ref(false)
-const htmlContent = ref('')
-
-function hasHtmlCode(text) {
-  return /<(!DOCTYPE|html|head|body|div|script|style)/i.test(text)
-}
-function extractHtml(text) {
-  // 从文本中提取 HTML 内容（可能在 markdown 代码块里）
-  const match = text.match(/```(?:html)?\s*\n?([\s\S]*?)```/)
-  if (match) return match[1]
-  // 直接以 < 开头的大段文本
-  if (text.trim().startsWith('<')) {
-    const lines = text.split('\n')
-    const start = lines.findIndex(l => l.trim().startsWith('<!') || l.trim().startsWith('<html') || l.trim().startsWith('<'))
-    if (start >= 0) return lines.slice(start).join('\n')
-  }
-  return text
-}
-function previewHtml(text) {
-  if (showPreview.value) {
-    showPreview.value = false
-    htmlContent.value = ''
-  } else {
-    htmlContent.value = extractHtml(text)
-    showPreview.value = true
-  }
-}
-
 // ---- data ----
 async function loadAgents(){try{const r=await fetch('/api/agents');const d=await r.json();agents.value=d.agents||[];if(agents.value.length&&!currentAgent.value)selectAgent(agents.value[0].agent_id)}catch{}}
 async function loadSys(){try{const r=await fetch('/api/system');const d=await r.json();roles.value=d.roles||[];workgroups.value=d.workgroups||[];if(d.gpu){llmOnline.value=d.gpu.llm_available;modelName.value=d.gpu.model||modelName.value}}catch{try{const r=await fetch('/api/health');const d=await r.json();llmOnline.value=d.llm_available}catch{}}}
 function selectAgent(id){currentAgent.value=id;messages.value=[];loadHistory(id)}
-async function loadHistory(id){try{const r=await fetch('/api/agents/'+id+'/history');messages.value=(await r.json()).history||[];scroll()}catch{}}
 
 // ---- send ----
 async function send(){
-  if(!txt.value||!currentAgent.value)return
-  const t=txt.value;txt.value='';messages.value.push({role:'user',content:t});scroll()
-  streaming.value=true;buf.value=''
+  const text=txt.value.trim()
+  if(!text||!currentAgent.value||streaming.value)return
+  const t=text;txt.value='';resetInputHeight();messages.value.push({role:'user',content:t});scroll()
 
-  // 自动创建/复用当前对话
   if(!currentConversation.value){
     currentConversation.value={
       id: Date.now().toString(36),
@@ -305,7 +420,7 @@ async function send(){
     }
   }
 
-  // init pipeline panel
+  streaming.value=true;buf.value=''
   pipelineActive.value=true
   pipelineSteps.value=[{role:'匹配中…',s:'running',output:''}]
   selectedStep.value=0
@@ -317,7 +432,6 @@ async function send(){
     if(d.type==='stream_token'){buf.value+=d.content;scroll()}
     else if(d.type==='stream_meta'){
       lastMeta.value={type:d.dispatch_type,workgroup:d.workgroup,roles_used:d.roles_used}
-      // update pipeline panel
       if(d.roles_used?.length){
         pipelineSteps.value=d.roles_used.map((r,i)=>({role:r,s:i===0?'running':'pending',output:''}))
         selectedStep.value=0
@@ -328,13 +442,10 @@ async function send(){
       messages.value.push({role:'assistant',content:final,meta:lastMeta.value||undefined})
       buf.value='';lastMeta.value=null;streaming.value=false;ws.close()
 
-      // 保存到对话历史
       saveCurrentToStorage()
       refreshConversationList()
 
-      // finalize pipeline
       if(pipelineActive.value && pipelineSteps.value.length){
-        // Try to parse workgroup output to extract per-role results
         try {
           const results = parsePipelineOutput(final)
           if(results.length){
@@ -358,13 +469,10 @@ async function send(){
 }
 
 function parsePipelineOutput(text) {
-  // extract steps like "#### 步骤 1: 教练"  or "✓ 步骤 1: coach 完成"
   const steps = []
   const pattern = /(?:####?\s*)?步骤\s*(\d+)\s*[:：]\s*(\S+)/g
   const matches = [...text.matchAll(pattern)]
   if(!matches.length) return []
-
-  // collect content between steps
   const segments = text.split(/(?:####?\s*)?步骤\s*\d+\s*[:：]\s*\S+/)
   matches.forEach((m,i) => {
     steps.push({num:m[1], role:m[2], content: (segments[i+1]||'').trim().slice(0,500)})
@@ -372,13 +480,15 @@ function parsePipelineOutput(text) {
   return steps
 }
 
-function sendQuick(t){txt.value=t;send()}
-function triggerWg(wg){txt.value=(wg.trigger_keywords||[])[0]||wg.id;send()}
+function sendQuick(t){txt.value=t;nextTick(()=>{send()})}
+function triggerWg(wg){txt.value=(wg.trigger_keywords||[])[0]||wg.id;nextTick(()=>{send()})}
 function scroll(){nextTick(()=>{if(msgEl.value)msgEl.value.scrollTop=msgEl.value.scrollHeight})}
+function resetInputHeight(){if(inputEl.value)inputEl.value.style.height='auto'}
+function autoResize(e){const el=e.target;el.style.height='auto';el.style.height=Math.min(el.scrollHeight,160)+'px'}
+
 onMounted(()=>{
   loadAgents();loadSys();setInterval(loadSys,15000)
   refreshConversationList()
-  // 自动恢复最近的对话
   const convs = loadFromStorage()
   if(convs.length>0 && !currentConversation.value){
     loadConversation(convs[0])
@@ -387,130 +497,441 @@ onMounted(()=>{
 </script>
 
 <style scoped>
-.agent-platform{display:flex;height:100%}
+/* ==========================================
+   设计系统 — 现代深色 + 紫蓝主调
+   ========================================== */
+.agent-platform {
+  display: grid;
+  grid-template-columns: 280px 1fr 360px;
+  height: 100vh;
+  background: #0a0a14;
+  color: #e8e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-feature-settings: "cv11", "ss01";
+  overflow: hidden;
+}
 
-/* ===== LEFT PANEL ===== */
-.left-panel{width:240px;background:var(--bg-1);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
-.sys-bar{display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--bg-2);cursor:pointer;border-bottom:1px solid var(--border)}
-.sys-dot{width:7px;height:7px;border-radius:50%;background:#e8463a}
-.sys-bar.online .sys-dot{background:#00b894;box-shadow:0 0 5px rgba(0,184,148,.35)}
-.sys-text{font-size:11px;color:var(--text-2);flex:1}
-.sys-arrow{font-size:9px;color:var(--text-2)}
-.sys-detail{padding:6px 10px;background:var(--bg-0);border-bottom:1px solid var(--border)}
-.kv{display:flex;justify-content:space-between;font-size:11px;padding:2px 0;color:var(--text-2)}.kv span:last-child{color:var(--text-0)}
-.section{border-bottom:1px solid var(--border)}
-.shead{padding:10px 10px 6px;font-size:10px;color:var(--text-2);text-transform:uppercase;letter-spacing:.05em;cursor:pointer;display:flex;justify-content:space-between}
-.shead:hover{color:var(--text-0)}
-.a-item{display:flex;gap:8px;padding:8px 10px;cursor:pointer;transition:background .12s}
-.a-item:hover{background:rgba(255,255,255,.02)}
-.a-item.active{background:rgba(108,92,231,.1);border-right:2px solid var(--accent)}
-.a-icon{font-size:16px;flex-shrink:0}
-.a-name{font-size:12px;font-weight:500;color:var(--text-0)}.a-desc{font-size:10px;color:var(--text-2);margin-top:1px}
-.slist{max-height:260px;overflow-y:auto;padding:0 8px 6px}
-.glabel{font-size:9px;color:var(--accent-2);text-transform:uppercase;letter-spacing:.05em;padding:5px 3px 2px;font-weight:600}
-.r-chip{display:flex;align-items:center;gap:5px;padding:2px 6px;margin:1px 0;border-radius:4px;font-size:11px}
-.rdot{width:5px;height:5px;border-radius:50%;flex-shrink:0}.g-gpu0{background:var(--accent)}.g-gpu1{background:var(--accent-2)}.g-gpu2{background:#fdcb6e}
-.rname{color:var(--text-0);font-size:11px}
-.wg-chip{padding:5px 8px;margin:2px 0;border-radius:5px;cursor:pointer;border:1px solid transparent;transition:all .12s}
-.wg-chip:hover{background:var(--bg-2);border-color:var(--accent)}
-.wg-top{display:flex;justify-content:space-between;font-size:11px}.wg-top span:first-child{color:var(--text-0);font-weight:500}
-.steps{font-size:9px;color:var(--accent-2);background:rgba(0,206,201,.1);padding:0 5px;border-radius:6px}
-.wg-kw{font-size:9px;color:var(--text-2);margin-top:2px}
+/* 滚动条 */
+.agent-platform ::-webkit-scrollbar { width: 6px; height: 6px; }
+.agent-platform ::-webkit-scrollbar-track { background: transparent; }
+.agent-platform ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+.agent-platform ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
 
-/* ===== CHAT ===== */
-.chat-col{flex:1;display:flex;flex-direction:column;min-width:0}
-.messages{flex:1;overflow-y:auto;padding:20px 24px}
-.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px}
-.empty-icon{font-size:44px}.empty-title{font-size:18px;font-weight:600}.empty-sub{font-size:12px;color:var(--text-2)}
-.pills{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:6px}
-.pill{padding:5px 14px;background:var(--bg-1);border:1px solid var(--border);border-radius:16px;font-size:12px;color:var(--text-1);cursor:pointer;transition:all .12s}
-.pill:hover{border-color:var(--accent);color:var(--accent)}
-.msg{margin-bottom:14px;max-width:78%;min-width:0;display:flex;width:fit-content}
-.msg.user{margin-left:auto;flex-direction:row-reverse}
-.msg.assistant{align-items:flex-start}
-.bubble{padding:9px 14px;border-radius:10px;font-size:13px;line-height:1.6;max-width:100%;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word;white-space:pre-wrap;overflow-x:auto}
-.bubble *{max-width:100%;word-wrap:break-word;overflow-wrap:break-word}
-.bubble table{display:block;max-width:100%;overflow-x:auto}
-.bubble pre{white-space:pre-wrap;word-break:break-word;max-width:100%;overflow-x:auto}
-.bubble code{white-space:pre-wrap;word-break:break-all}
-.msg.user .bubble{background:var(--accent);color:#fff;border-bottom-right-radius:2px}
-.msg.assistant .bubble{background:var(--bg-1);border:1px solid var(--border);border-bottom-left-radius:2px;word-break:break-word}
-.c{animation:blink 1s infinite}@keyframes blink{50%{opacity:0}}
-.msg-meta{margin-top:4px;padding-left:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.mtag{padding:2px 7px;background:rgba(108,92,231,.1);border:1px solid rgba(108,92,231,.2);border-radius:8px;font-size:10px;color:var(--accent)}
-.mroles{font-size:9px;color:var(--text-2)}
-.done-badge{font-size:10px;color:#00b894}
-.input-bar{display:flex;gap:8px;padding:14px 18px;border-top:1px solid var(--border)}
-.inp{flex:1;padding:9px 14px;background:var(--bg-1);border:1px solid var(--border);border-radius:8px;color:var(--text-0);font-size:13px;outline:none}.inp:focus{border-color:var(--accent)}
-.send-btn{padding:9px 16px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:13px;cursor:pointer}.send-btn:disabled{opacity:.4;cursor:not-allowed}
+/* ==========================================
+   左栏
+   ========================================== */
+.left-panel {
+  background: linear-gradient(180deg, #0f0f1a 0%, #0a0a14 100%);
+  border-right: 1px solid rgba(255,255,255,0.06);
+  overflow-y: auto;
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
 
-/* ===== RIGHT PANEL (产出区) ===== */
-.right-panel{width:280px;background:var(--bg-1);border-left:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
-.rhead{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border)}
-.rhead-badge{padding:2px 8px;border-radius:8px;font-size:10px;font-weight:500}
-.rhead-badge.active{background:rgba(0,206,201,.12);color:var(--accent-2);animation:pulse 2s infinite}
-.rhead-badge.done{background:rgba(0,184,148,.12);color:#00b894}
-.rhead-badge.idle{background:rgba(255,255,255,.04);color:var(--text-2)}
-.rhead-title{font-size:12px;font-weight:600;color:var(--text-0)}
-@keyframes pulse{50%{opacity:.5}}
-.rbody{flex:1;overflow-y:auto}
-.pipeline-steps{padding:8px}
-.step{display:flex;gap:8px;padding:8px;border-radius:6px;cursor:pointer;transition:background .12s;align-items:center;border:1px solid transparent}
-.step:hover{background:rgba(255,255,255,.02)}
-.step.active{border-color:var(--accent);background:rgba(108,92,231,.08)}
-.step.done{opacity:.7}
-.step.fail{border-color:rgba(232,70,58,.3)}
-.step-dot{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;background:var(--bg-2);color:var(--text-2)}
-.step.done .step-dot{background:rgba(0,184,148,.15);color:#00b894}
-.step.active .step-dot{background:rgba(108,92,231,.15);color:var(--accent);animation:pulse 1.5s infinite}
-.step.fail .step-dot{background:rgba(232,70,58,.15);color:#e8463a}
-.step-info{min-width:0}
-.step-role{font-size:12px;color:var(--text-0);font-weight:500}
-.step-status{font-size:10px;color:var(--text-2);margin-top:1px}
-.step-detail{margin:0 8px 8px;background:var(--bg-2);border:1px solid var(--border);border-radius:8px;overflow:hidden}
-.detail-head{padding:8px 10px;font-size:11px;color:var(--accent-2);border-bottom:1px solid var(--border);font-weight:500}
-.detail-body{padding:10px;font-size:12px;line-height:1.6;color:var(--text-1);max-height:300px;overflow-y:auto}
-.empty-r{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:32px 16px}
-.empty-r-icon{font-size:40px}.empty-r-text{font-size:13px;color:var(--text-1);font-weight:500}.empty-r-sub{font-size:11px;color:var(--text-2)}
+.system-card {
+  position: relative;
+  background: linear-gradient(135deg, rgba(108,92,231,0.12), rgba(0,206,201,0.06));
+  border: 1px solid rgba(108,92,231,0.25);
+  border-radius: 14px;
+  padding: 14px;
+  transition: all 0.2s;
+}
+.system-card:hover { border-color: rgba(108,92,231,0.4); }
+.system-card.online { border-color: rgba(0,206,201,0.3); }
 
-/* ===== 对话头部 + 历史 ===== */
+.system-status { display: flex; align-items: center; gap: 12px; }
+.status-indicator {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #6b7280; box-shadow: 0 0 0 3px rgba(107,114,128,0.15);
+}
+.system-card.online .status-indicator {
+  background: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.2);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+@keyframes pulse-glow {
+  0%,100% { box-shadow: 0 0 0 3px rgba(16,185,129,0.2); }
+  50% { box-shadow: 0 0 0 5px rgba(16,185,129,0.1); }
+}
+.status-info { flex: 1; min-width: 0; }
+.status-label { font-size: 11px; color: #8aa8c8; text-transform: uppercase; letter-spacing: 0.5px; }
+.status-model { font-size: 13px; color: #e8e8f0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.system-stats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06);
+}
+.stat { text-align: center; }
+.stat-num { display: block; font-size: 18px; font-weight: 600; color: #6c5ce7; }
+.stat-label { font-size: 10px; color: #8aa8c8; text-transform: uppercase; letter-spacing: 0.5px; }
+
+.expand-btn {
+  position: absolute; top: 14px; right: 14px;
+  background: none; border: none; color: #8aa8c8; cursor: pointer; padding: 2px;
+  transition: transform 0.2s;
+}
+.expand-btn svg { transition: transform 0.2s; }
+.expand-btn svg.rotated { transform: rotate(180deg); }
+
+/* 侧栏分区 */
+.sidebar-section { display: flex; flex-direction: column; gap: 8px; }
+.section-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 4px; cursor: pointer; user-select: none;
+}
+.section-header h3 {
+  font-size: 11px; font-weight: 600; color: #8aa8c8;
+  text-transform: uppercase; letter-spacing: 1px; margin: 0;
+}
+.section-badge {
+  font-size: 10px; color: #6c5ce7; background: rgba(108,92,231,0.15);
+  padding: 1px 6px; border-radius: 8px; font-weight: 600;
+}
+.section-arrow { margin-left: auto; color: #8aa8c8; transition: transform 0.2s; }
+.section-arrow.rotated { transform: rotate(180deg); }
+
+/* 智能体列表 */
+.agent-list { display: flex; flex-direction: column; gap: 4px; }
+.agent-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px; border-radius: 10px; cursor: pointer;
+  transition: all 0.15s; border: 1px solid transparent;
+}
+.agent-card:hover { background: rgba(255,255,255,0.03); }
+.agent-card.active {
+  background: linear-gradient(135deg, rgba(108,92,231,0.15), rgba(0,206,201,0.08));
+  border-color: rgba(108,92,231,0.4);
+}
+.agent-avatar {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: linear-gradient(135deg, #6c5ce7, #00cec9);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+}
+.agent-info { flex: 1; min-width: 0; }
+.agent-name { font-size: 13px; color: #e8e8f0; font-weight: 500; }
+.agent-desc { font-size: 11px; color: #8aa8c8; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 工作组列表 */
+.workgroup-list { display: flex; flex-direction: column; gap: 6px; }
+.workgroup-card {
+  padding: 10px 12px; border-radius: 10px; cursor: pointer;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+  transition: all 0.15s;
+}
+.workgroup-card:hover {
+  background: rgba(108,92,231,0.08);
+  border-color: rgba(108,92,231,0.3);
+  transform: translateX(2px);
+}
+.wg-name { font-size: 13px; font-weight: 500; color: #e8e8f0; margin-bottom: 4px; }
+.wg-desc { font-size: 11px; color: #8aa8c8; line-height: 1.4; margin-bottom: 8px; }
+.wg-footer { display: flex; justify-content: space-between; align-items: center; }
+.wg-steps {
+  font-size: 10px; color: #00cec9; background: rgba(0,206,201,0.1);
+  padding: 1px 6px; border-radius: 4px; font-weight: 600;
+}
+.wg-kws { font-size: 10px; color: #6c5ce7; }
+
+/* ==========================================
+   中栏 - 对话
+   ========================================== */
+.chat-col {
+  display: flex; flex-direction: column; min-width: 0;
+  background: #0a0a14;
+  position: relative;
+}
+
 .chat-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 16px; border-bottom: 1px solid var(--border);
-  background: var(--bg-1);
+  padding: 14px 24px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(15,15,26,0.6); backdrop-filter: blur(12px);
+  flex-shrink: 0;
 }
-.chat-title { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-1); }
-.msg-count { font-size: 11px; color: var(--text-2); padding: 1px 6px; background: var(--bg-2); border-radius: 3px; }
+.chat-title-area { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.chat-title { font-size: 16px; font-weight: 600; color: #e8e8f0; margin: 0; }
+.title-placeholder { color: #6b7280; font-weight: 500; }
+.msg-count {
+  font-size: 11px; color: #8aa8c8; background: rgba(255,255,255,0.05);
+  padding: 2px 8px; border-radius: 10px;
+}
 .chat-actions { display: flex; gap: 6px; }
-.icon-btn {
-  padding: 4px 10px; font-size: 12px; border: 1px solid var(--border);
-  border-radius: 4px; background: var(--bg-2); color: var(--text-1);
-  cursor: pointer; transition: all 0.15s;
+.action-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; font-size: 12px; font-weight: 500;
+  background: rgba(255,255,255,0.04); color: #c8d8e8;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px; cursor: pointer; transition: all 0.15s;
 }
-.icon-btn:hover:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
-.icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.icon-btn.danger:hover:not(:disabled) { background: var(--error); border-color: var(--error); }
+.action-btn:hover:not(:disabled) {
+  background: rgba(108,92,231,0.15);
+  border-color: rgba(108,92,231,0.4);
+  color: #e8e8f0;
+}
+.action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.action-btn.danger:hover:not(:disabled) {
+  background: rgba(232,70,58,0.15);
+  border-color: rgba(232,70,58,0.4);
+  color: #fca5a5;
+}
 
+/* 历史面板 */
 .history-panel {
-  position: absolute; top: 40px; right: 16px;
-  width: 280px; max-height: 400px; overflow-y: auto;
-  background: var(--bg-1); border: 1px solid var(--border);
-  border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  position: absolute; top: 60px; right: 20px;
+  width: 320px; max-height: 480px; overflow-y: auto;
+  background: rgba(15,15,26,0.98);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  backdrop-filter: blur(20px);
   z-index: 100;
 }
+.slide-enter-active, .slide-leave-active { transition: all 0.2s ease; }
+.slide-enter-from, .slide-leave-to { opacity: 0; transform: translateY(-8px); }
 .history-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 12px; border-bottom: 1px solid var(--border);
-  font-size: 13px; color: var(--text-0);
+  padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.06);
 }
-.history-empty { padding: 24px; text-align: center; color: var(--text-2); font-size: 12px; }
+.history-head h3 { font-size: 13px; font-weight: 600; color: #e8e8f0; margin: 0; }
+.close-btn {
+  width: 24px; height: 24px; background: none; border: none;
+  color: #8aa8c8; cursor: pointer; font-size: 18px; line-height: 1;
+}
+.close-btn:hover { color: #e8e8f0; }
+.history-empty { padding: 40px 20px; text-align: center; color: #6b7280; }
+.history-empty .empty-icon { font-size: 32px; margin-bottom: 8px; }
 .history-item {
-  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.04);
   cursor: pointer; transition: background 0.15s;
 }
-.history-item:hover { background: var(--bg-2); }
-.history-item.active { background: var(--accent); color: #fff; }
-.history-item.active .conv-meta { color: rgba(255,255,255,0.8); }
-.conv-title { font-size: 13px; color: var(--text-0); margin-bottom: 2px; }
-.conv-meta { font-size: 11px; color: var(--text-2); }
+.history-item:hover { background: rgba(255,255,255,0.03); }
+.history-item.active {
+  background: linear-gradient(90deg, rgba(108,92,231,0.2), transparent);
+  border-left: 2px solid #6c5ce7;
+}
+.conv-title { font-size: 13px; color: #e8e8f0; font-weight: 500; margin-bottom: 4px; }
+.conv-meta { font-size: 11px; color: #8aa8c8; }
+
+/* 消息区 */
+.messages {
+  flex: 1; overflow-y: auto; padding: 24px;
+  display: flex; flex-direction: column; gap: 16px; min-width: 0;
+}
+.messages > * { max-width: 100%; min-width: 0; }
+
+/* 空状态 */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; text-align: center; padding: 40px 20px;
+}
+.empty-icon { font-size: 64px; margin-bottom: 20px; opacity: 0.6; }
+.empty-title { font-size: 22px; font-weight: 600; color: #e8e8f0; margin: 0 0 8px; }
+.empty-sub { font-size: 14px; color: #8aa8c8; margin: 0 0 32px; }
+.quick-pills { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 600px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 16px; font-size: 13px; color: #c8d8e8;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 20px; cursor: pointer; transition: all 0.15s;
+}
+.pill:hover {
+  background: rgba(108,92,231,0.15);
+  border-color: rgba(108,92,231,0.4);
+  color: #e8e8f0;
+  transform: translateY(-1px);
+}
+.pill.primary {
+  background: linear-gradient(135deg, rgba(108,92,231,0.2), rgba(0,206,201,0.1));
+  border-color: rgba(108,92,231,0.4);
+}
+.pill-icon { font-size: 16px; }
+
+/* 消息气泡 */
+.msg { display: flex; gap: 12px; max-width: 800px; }
+.msg.user { margin-left: auto; flex-direction: row-reverse; }
+.msg-avatar {
+  width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+  background: linear-gradient(135deg, #6c5ce7, #00cec9);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.msg-content { min-width: 0; max-width: calc(100% - 44px); display: flex; flex-direction: column; gap: 6px; }
+.bubble {
+  padding: 12px 16px; border-radius: 14px; font-size: 14px; line-height: 1.65;
+  word-wrap: break-word; word-break: break-word; overflow-wrap: break-word;
+  white-space: pre-wrap; max-width: 100%;
+}
+.bubble * { max-width: 100%; }
+.bubble p { margin: 0 0 8px; }
+.bubble p:last-child { margin-bottom: 0; }
+.bubble code {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px;
+  background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px;
+  white-space: pre-wrap; word-break: break-all;
+}
+.bubble pre {
+  background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px; padding: 12px; overflow-x: auto; margin: 8px 0;
+}
+.bubble pre code { background: none; padding: 0; }
+.bubble table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.bubble table th, .bubble table td { border: 1px solid rgba(255,255,255,0.1); padding: 6px 10px; }
+.bubble table th { background: rgba(255,255,255,0.05); font-weight: 600; }
+.bubble ul, .bubble ol { padding-left: 20px; margin: 8px 0; }
+.bubble li { margin: 4px 0; }
+.bubble h1, .bubble h2, .bubble h3 { margin: 12px 0 8px; font-weight: 600; }
+.bubble h1 { font-size: 18px; } .bubble h2 { font-size: 16px; } .bubble h3 { font-size: 14px; }
+
+.msg.user .bubble {
+  background: linear-gradient(135deg, #6c5ce7, #5a4dcf);
+  color: #fff; border-bottom-right-radius: 4px;
+}
+.msg.assistant .bubble {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  color: #e8e8f0; border-bottom-left-radius: 4px;
+}
+.bubble.streaming { min-height: 44px; }
+
+.cursor-blink { color: #6c5ce7; animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* 元信息 */
+.msg-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0 4px; }
+.meta-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; color: #00cec9; background: rgba(0,206,201,0.1);
+  padding: 2px 8px; border-radius: 10px; font-weight: 500;
+}
+.meta-roles { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #8aa8c8; }
+.meta-roles-text { font-family: "SF Mono", Menlo, monospace; }
+.meta-badge { color: #10b981; font-weight: 600; }
+
+/* 输入栏 */
+.input-bar { padding: 16px 24px 20px; flex-shrink: 0; }
+.input-wrap {
+  display: flex; align-items: flex-end; gap: 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px; padding: 8px 8px 8px 16px;
+  transition: all 0.2s;
+}
+.input-wrap:focus-within {
+  border-color: rgba(108,92,231,0.5);
+  background: rgba(255,255,255,0.05);
+  box-shadow: 0 0 0 3px rgba(108,92,231,0.1);
+}
+.input {
+  flex: 1; background: none; border: none; outline: none;
+  color: #e8e8f0; font-size: 14px; line-height: 1.5; resize: none;
+  font-family: inherit; min-height: 24px; max-height: 160px;
+  padding: 6px 0;
+}
+.input::placeholder { color: #6b7280; }
+.input:disabled { opacity: 0.5; }
+
+.send-btn {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  background: linear-gradient(135deg, #6c5ce7, #5a4dcf);
+  border: none; color: #fff; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.send-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(108,92,231,0.4);
+}
+.send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.loading-dots { display: flex; gap: 3px; }
+.loading-dots span {
+  width: 4px; height: 4px; background: #fff; border-radius: 50%;
+  animation: dot-bounce 1.4s infinite ease-in-out both;
+}
+.loading-dots span:nth-child(2) { animation-delay: 0.16s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.32s; }
+@keyframes dot-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.input-hint { text-align: center; font-size: 11px; color: #6b7280; margin-top: 8px; }
+
+/* ==========================================
+   右栏 - 产出区
+   ========================================== */
+.right-panel {
+  background: linear-gradient(180deg, #0f0f1a 0%, #0a0a14 100%);
+  border-left: 1px solid rgba(255,255,255,0.06);
+  display: flex; flex-direction: column; min-width: 0;
+}
+.rhead {
+  padding: 18px 20px; border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.rhead-status { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.rhead-dot { width: 8px; height: 8px; border-radius: 50%; }
+.rhead-dot.idle { background: #6b7280; }
+.rhead-dot.active { background: #6c5ce7; animation: pulse-glow 1.5s infinite; }
+.rhead-dot.done { background: #10b981; }
+.rhead-label { font-size: 11px; color: #8aa8c8; text-transform: uppercase; letter-spacing: 0.5px; }
+.rhead-title { font-size: 15px; font-weight: 600; color: #e8e8f0; margin: 0; }
+
+.rbody { flex: 1; overflow-y: auto; padding: 16px 20px; }
+.rbody.empty { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.empty-illustration { color: #6c5ce7; opacity: 0.4; margin-bottom: 16px; }
+.empty-r-text { font-size: 14px; color: #c8d8e8; margin: 0 0 4px; }
+.empty-r-sub { font-size: 12px; color: #6b7280; margin: 0; text-align: center; }
+
+/* 流水线 */
+.pipeline { display: flex; flex-direction: column; gap: 8px; }
+.step {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: 10px; cursor: pointer;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
+  transition: all 0.15s;
+}
+.step:hover { background: rgba(255,255,255,0.05); }
+.step.active {
+  background: linear-gradient(90deg, rgba(108,92,231,0.15), transparent);
+  border-color: rgba(108,92,231,0.4);
+}
+.step.done .step-indicator { background: rgba(16,185,129,0.2); color: #10b981; }
+.step.fail .step-indicator { background: rgba(232,70,58,0.2); color: #e8463a; }
+
+.step-indicator {
+  width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.05); color: #6b7280;
+  font-size: 12px; font-weight: 600;
+}
+.pulse-dot {
+  width: 8px; height: 8px; background: #6c5ce7; border-radius: 50%;
+  animation: pulse-glow 1.2s ease-in-out infinite;
+}
+.step-info { flex: 1; min-width: 0; }
+.step-role { font-size: 13px; font-weight: 500; color: #e8e8f0; }
+.step-status { font-size: 11px; color: #8aa8c8; margin-top: 2px; }
+.step.active .step-role { color: #6c5ce7; }
+.step.active .step-status { color: #00cec9; }
+
+/* 步骤详情 */
+.step-detail { margin-top: 16px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; overflow: hidden; }
+.detail-head {
+  padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.detail-role { font-size: 12px; font-weight: 600; color: #00cec9; }
+.detail-action {
+  font-size: 11px; padding: 3px 10px; border-radius: 6px;
+  background: rgba(108,92,231,0.15); color: #c8d8e8;
+  border: 1px solid rgba(108,92,231,0.3); cursor: pointer; transition: all 0.15s;
+}
+.detail-action:hover { background: rgba(108,92,231,0.3); }
+.detail-body { padding: 14px; font-size: 13px; line-height: 1.6; color: #c8d8e8; max-height: 400px; overflow-y: auto; }
+.detail-body * { max-width: 100%; }
+.html-preview-frame { border-top: 1px solid rgba(255,255,255,0.06); }
+.preview-iframe { width: 100%; height: 400px; border: none; background: #fff; }
 </style>
