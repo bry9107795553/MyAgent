@@ -511,6 +511,36 @@ onMounted(async () => {
   // 初始化 store (加载布局 + 模块库 + 模板)
   await store.init()
 
+  // 如果完全空，自动创建默认工作台
+  if (store.modules.length === 0 && store.availableModules.length === 0 && store.templates.length > 0) {
+    // 从模板中选几个默认的自动加到工作台
+    const defaults = ['note', 'kanban', 'calendar']
+    for (const id of defaults) {
+      const tpl = store.templates.find(t => t.id === id)
+      if (tpl) {
+        try {
+          const res = await fetch('/api/modules', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: tpl.name,
+              description: tpl.description || '',
+              template: tpl.id,
+              config: tpl.default_config || {},
+            }),
+          })
+          if (res.ok) {
+            const data = await res.json()
+            store.availableModules.push(data.module || data)
+            store.addModule({ ...(data.module || data), x: store.modules.length * 3, y: 0, w: 6, h: 8 })
+          }
+        } catch (e) {
+          // 静默失败，不阻塞工作台加载
+        }
+      }
+    }
+  }
+
   // 初始化 GridStack
   await nextTick()
   initGrid()
@@ -522,6 +552,11 @@ onMounted(async () => {
   }
 
   loading.value = false
+
+  // 保存默认布局
+  if (mergedModules.value.length > 0) {
+    store.saveLayout()
+  }
 })
 
 onBeforeUnmount(() => {

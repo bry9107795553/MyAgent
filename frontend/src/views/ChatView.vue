@@ -103,8 +103,15 @@
           </div>
         </div>
         <div v-if="selectedStep!==null && displaySteps[selectedStep]?.output" class="step-detail">
-          <div class="detail-head">{{ displaySteps[selectedStep].role }} · 产出</div>
-          <div class="detail-body" v-html="md(displaySteps[selectedStep].output)"></div>
+          <div class="detail-head">{{ displaySteps[selectedStep].role }} · 产出
+            <button v-if="hasHtmlCode(displaySteps[selectedStep].output)"
+              class="btn-preview-html"
+              @click="previewHtml(displaySteps[selectedStep].output)">{{ showPreview ? '📄 看源码' : '🌐 预览' }}</button>
+          </div>
+          <div v-if="showPreview && htmlContent" class="html-preview-frame">
+            <iframe :srcdoc="htmlContent" sandbox="allow-scripts" class="preview-iframe"></iframe>
+          </div>
+          <div v-else class="detail-body" v-html="md(displaySteps[selectedStep].output)"></div>
         </div>
       </div>
       <div class="rbody empty-r" v-else>
@@ -139,6 +146,35 @@ const roleGroups=computed(()=>{
 const displaySteps = computed(() => pipelineActive.value ? pipelineSteps.value : lastPipeline.value)
 
 function md(t){try{return marked(t||'')}catch{return t||''}}
+
+// ---- HTML 预览 ----
+const showPreview = ref(false)
+const htmlContent = ref('')
+
+function hasHtmlCode(text) {
+  return /<(!DOCTYPE|html|head|body|div|script|style)/i.test(text)
+}
+function extractHtml(text) {
+  // 从文本中提取 HTML 内容（可能在 markdown 代码块里）
+  const match = text.match(/```(?:html)?\s*\n?([\s\S]*?)```/)
+  if (match) return match[1]
+  // 直接以 < 开头的大段文本
+  if (text.trim().startsWith('<')) {
+    const lines = text.split('\n')
+    const start = lines.findIndex(l => l.trim().startsWith('<!') || l.trim().startsWith('<html') || l.trim().startsWith('<'))
+    if (start >= 0) return lines.slice(start).join('\n')
+  }
+  return text
+}
+function previewHtml(text) {
+  if (showPreview.value) {
+    showPreview.value = false
+    htmlContent.value = ''
+  } else {
+    htmlContent.value = extractHtml(text)
+    showPreview.value = true
+  }
+}
 
 // ---- data ----
 async function loadAgents(){try{const r=await fetch('/api/agents');const d=await r.json();agents.value=d.agents||[];if(agents.value.length&&!currentAgent.value)selectAgent(agents.value[0].agent_id)}catch{}}
