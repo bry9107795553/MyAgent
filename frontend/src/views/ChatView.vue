@@ -794,8 +794,10 @@ onMounted(()=>{
 .bubble h1 { font-size: 18px; } .bubble h2 { font-size: 16px; } .bubble h3 { font-size: 14px; }
 
 .msg.user .bubble {
-  background: linear-gradient(135deg, #4f46e5, #6366f1);
-  color: #fff; border-bottom-right-radius: 4px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  color: #1f2937; border-bottom-right-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
 }
 .msg.assistant .bubble {
   background: #fff;
