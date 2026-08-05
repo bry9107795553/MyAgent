@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MyAgent 功能中心</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #f8f9fb; color: #1a1a2e; line-height: 1.5; font-size: 14px; }
+  .container { max-width: 1280px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 500; margin: 0 0 6px; color: #1a1a2e; }
+  .subtitle { color: #6b6b7e; font-size: 13px; margin: 0 0 24px; }
+  .status-banner { background: #eff6ff; border: 0.5px solid #2563eb; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #1e3a8a; }
+  .status-banner .label { font-weight: 500; }
+  .status-banner code { background: rgba(37,99,235,0.08); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
+  .status-banner .note { color: #6b6b7e; font-size: 12px; margin-top: 4px; }
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .metric-card { background: #ffffff; border: 0.5px solid #e4e4ea; border-radius: 8px; padding: 14px 16px; }
+  .metric-card .label { font-size: 11px; color: #9b9ba8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
+  .metric-card .value { font-size: 28px; font-weight: 500; color: #1a1a2e; line-height: 1.1; margin-top: 4px; }
+  .metric-card .desc { font-size: 12px; color: #6b6b7e; margin-top: 4px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid #e4e4ea; margin-bottom: 20px; flex-wrap: wrap; }
+  .tab-btn { background: none; border: none; padding: 10px 16px; font-size: 13px; color: #6b6b7e; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s; }
+  .tab-btn:hover { color: #1a1a2e; }
+  .tab-btn.active { color: #1a1a2e; border-bottom-color: #6c5ce7; font-weight: 500; }
+  .tab-count { background: #f1efe8; color: #6b6b7e; font-size: 11px; padding: 1px 6px; border-radius: 10px; margin-left: 6px; }
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .role-card { background: #ffffff; border: 0.5px solid #e4e4ea; border-radius: 10px; padding: 16px; transition: all 0.15s; }
+  .role-card:hover { border-color: #6c5ce7; box-shadow: 0 2px 8px rgba(108,92,231,0.08); }
+  .role-card.degraded { border-left: 3px solid #ef6c00; }
+  .role-card .head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .role-card .badge-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; color: #fff; flex-shrink: 0; }
+  .role-card .name { font-size: 14px; font-weight: 500; color: #1a1a2e; }
+  .role-card .id { font-size: 11px; color: #9b9ba8; font-family: ui-monospace, SFMono-Regular, monospace; }
+  .role-card .desc { font-size: 12px; color: #6b6b7e; line-height: 1.5; margin: 6px 0; min-height: 36px; }
+  .role-card .chips { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0; }
+  .chip { font-size: 11px; background: #f1efe8; color: #5f5e5a; padding: 2px 7px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, monospace; }
+  .chip.cap { background: #e6f1fb; color: #185fa5; }
+  .chip.tool { background: #faece7; color: #993c1d; }
+  .chip.warn { background: #faece7; color: #993c1d; }
+  .role-card .footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 0.5px solid #f1efe8; font-size: 11px; color: #6b6b7e; }
+  .role-card .model-bind { font-family: ui-monospace, SFMono-Regular, monospace; color: #6c5ce7; font-weight: 500; }
+  .role-card .group-tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: #f8f9fb; color: #6b6b7e; }
+  .chip-degrade { font-size: 10px; background: #faece7; color: #993c1d; padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
+  .empty-state { padding: 40px; text-align: center; color: #9b9ba8; font-size: 13px; background: #fff; border: 1px dashed #e4e4ea; border-radius: 8px; }
+  .model-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; border: 0.5px solid #e4e4ea; font-size: 13px; }
+  .model-table th { background: #fafafa; padding: 10px 14px; text-align: left; color: #6b6b7e; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; border-bottom: 0.5px solid #e4e4ea; }
+  .model-table td { padding: 10px 14px; border-bottom: 0.5px solid #f1efe8; color: #1a1a2e; }
+  .model-table tr:last-child td { border-bottom: none; }
+  .model-table code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; background: #f1efe8; color: #5f5e5a; padding: 1px 5px; border-radius: 3px; }
+  .model-table .ok { color: #0f6e56; }
+  .model-table .warn { color: #993c1d; }
+  .ref-link { color: #6c5ce7; text-decoration: none; font-weight: 500; }
+  .ref-link:hover { text-decoration: underline; }
+  .info-banner { background: #f1efe8; border: 0.5px solid #d3d1c7; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; color: #44443f; }
+  .info-banner .label { font-weight: 500; color: #1a1a2e; }
+  .footer-note { margin-top: 32px; padding-top: 16px; border-top: 0.5px solid #e4e4ea; font-size: 12px; color: #9b9ba8; text-align: center; }
+  .footer-note a { color: #6c5ce7; text-decoration: none; }
+  details { background: #fff; border: 0.5px solid #e4e4ea; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; }
+  details summary { cursor: pointer; font-weight: 500; color: #1a1a2e; }
+  details summary:hover { color: #6c5ce7; }
+  details[open] { padding-bottom: 16px; }
+  details pre { background: #f1efe8; padding: 12px; border-radius: 6px; font-size: 11px; color: #44443f; overflow-x: auto; margin: 8px 0; }
+  .loading { text-align: center; padding: 40px; color: #9b9ba8; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>MyAgent 功能中心</h1>
+  <p class="subtitle">单卡 GPU 实例 · 18 角色 + 10 工作组 + 31 模块模板 · 全部就绪</p>
+
+  <div class="status-banner" id="status-banner">
+    <div><span class="label">推理模式</span>：单 GPU 模式（SINGLE_GPU_MODE=true）— 全部 18 个角色统一路由到</div>
+    <div style="margin-top:4px;"><code>http://localhost:8000/v1</code> · 当前加载模型 <code>Qwen2.5-14B-Instruct</code></div>
+    <div class="note">注：设计稿原计划 3 卡（14B/7B/VL-7B），本实例只有 14B，所以 visual_analyzer 标记降级（无 VL 多模态能力）。其他 17 个角色都能正常对话。</div>
+  </div>
+
+  <div class="metrics" id="metrics">
+    <div class="metric-card"><div class="label">系统角色</div><div class="value" id="m-roles">--</div><div class="desc">后端已注册的 18 个工厂能力</div></div>
+    <div class="metric-card"><div class="label">预设工作组</div><div class="value" id="m-wgs">--</div><div class="desc">从 data/workgroups/ 加载</div></div>
+    <div class="metric-card"><div class="label">模块模板</div><div class="value" id="m-modules">--</div><div class="desc">9 分类 31 模板</div></div>
+    <div class="metric-card"><div class="label">皮肤</div><div class="value" id="m-skins">--</div><div class="desc">前端主题切换</div></div>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="roles">系统角色<span class="tab-count" id="c-roles">18</span></button>
+    <button class="tab-btn" data-tab="workgroups">工作组<span class="tab-count" id="c-wgs">--</span></button>
+    <button class="tab-btn" data-tab="modules">模块模板<span class="tab-count" id="c-modules">--</span></button>
+    <button class="tab-btn" data-tab="agents">Agent 实例<span class="tab-count" id="c-agents">--</span></button>
+    <button class="tab-btn" data-tab="model">模型绑定</button>
+  </div>
+
+  <div id="tab-content" class="loading">载入中...</div>
+
+  <div class="footer-note">
+    返回主对话页 <a href="/#/chat" class="ref-link" id="back-link">/chat</a>
+    · API 文档 <a href="/docs" target="_blank" class="ref-link">/docs</a>
+    · 健康检查 <a href="/api/health" target="_blank" class="ref-link">/api/health</a>
+  </div>
+
+</div>
+
+<script>
+// ===== 角色池定义（来自 data/role_pool.json，硬编码便于离线展示） =====
+const ROLE_POOL = [
+  { id: "master", name: "主控", group: "general", model: "text", gpu_affinity: "gpu0", capabilities: ["dispatch","firewall","aggregate","progress_report"], tools: ["dispatch","workgroup_manager","memory_query","user_interaction"], desc: "前台接待 + 调度中心，接需求 / 分发 / 收结果 / 报进度 / 防火墙" },
+  { id: "coach", name: "教练", group: "dev", model: "text", gpu_affinity: "gpu0", capabilities: ["requirement_discovery","competitive_research","teaching","cognitive_adaptation","task_decomposition","phase_dispatch"], tools: ["requirement_tools","dispatch_tools","teaching_tools","phase_manager"], desc: "产品教练 + 导师，需求发现三步走 / 教学 / 认知适配 / 调度开发团队" },
+  { id: "knowledge_retriever", name: "知识检索", group: "general", model: "text", gpu_affinity: "gpu1", capabilities: ["rag_search","web_search","document_parsing","source_verification"], tools: ["rag_engine","web_search","document_parser","citation_tracker"], desc: "RAG + 联网搜索，资料收集 / 多源搜索 / 文档解析", degrade_note: "web_search 工具需联网，单卡实例访问外网受限" },
+  { id: "writer", name: "写作", group: "general", model: "text", gpu_affinity: "gpu0", capabilities: ["report_writing","email_drafting","copywriting","style_adaptation","revision"], tools: ["style_memory","draft_generator","format_converter"], desc: "报告 / 邮件 / 文案写作，风格记忆 / 初稿 / 修改" },
+  { id: "quality_checker", name: "质检", group: "general", model: "text", gpu_affinity: "gpu2", capabilities: ["fact_checking","logic_verification","conflict_detection","quality_assessment"], tools: ["fact_checker","logic_analyzer","quality_rules"], desc: "内容质量审查，事实核查 / 逻辑验证 / 冲突检测" },
+  { id: "scheduler", name: "日程", group: "general", model: "text", gpu_affinity: "gpu1", capabilities: ["schedule_scanning","time_management","reminder","conflict_resolution"], tools: ["calendar_manager","reminder_system","user_habits"], desc: "时间管理 / 提醒 / 日程冲突检测" },
+  { id: "creative", name: "创意", group: "general", model: "text", gpu_affinity: "gpu0", capabilities: ["brainstorming","solution_design","insight_extraction","preference_memory"], tools: ["idea_generator","preference_store"], desc: "头脑风暴 / 方案设计 / 洞察提炼 / 偏好记忆" },
+  { id: "translator", name: "翻译", group: "general", model: "text", gpu_affinity: "gpu1", capabilities: ["translation","terminology_management","localization","quality_self_check"], tools: ["terminology_library","translation_memory","glossary"], desc: "多语言翻译，术语库 / 翻译记忆 / 本地化" },
+  { id: "visual_analyzer", name: "视觉分析", group: "general", model: "vision", gpu_affinity: "gpu1", capabilities: ["image_analysis","screenshot_review","ui_evaluation","visual_description"], tools: ["vision_model","image_processor"], desc: "图片分析 / 截图审查 / UI 评估", degraded: true, degrade_note: "需 Qwen2.5-VL-7B 多模态模型，单卡实例未加载" },
+  { id: "designer", name: "设计师", group: "dev", model: "text", gpu_affinity: "gpu0", capabilities: ["design_system","page_inventory","multi_page_mockup","component_library","responsive_design","color_scheme"], tools: ["mockup_generator","design_tokens","contrast_checker","template_manager"], desc: "设计系统 / 多页面样图 / 组件库 / 响应式适配" },
+  { id: "developer", name: "开发", group: "dev", model: "text", gpu_affinity: "gpu0", capabilities: ["module_implementation","bug_fix","tech_debt_management","safe_refactor","dependency_management"], tools: ["code_exec","file_read","file_write","file_list"], desc: "代码实现 / 返工修复 / 技术债管理 / 安全重构" },
+  { id: "inspector", name: "巡检", group: "dev", model: "text", gpu_affinity: "gpu2", capabilities: ["architecture_review","code_inspection","tech_debt_identification","code_smell_detection","verdict"], tools: ["code_analyzer","standard_checker","report_generator","debt_marker"], desc: "架构守门人，14 项标准核查 / 技术债识别 / 代码级废弃检测" },
+  { id: "tester", name: "测试", group: "dev", model: "text", gpu_affinity: "gpu2", capabilities: ["compilation_check","lint_check","unit_test","coverage_report"], tools: ["tsc_runner","eslint_runner","vitest_runner"], desc: "硬工具门禁，tsc / eslint / vitest，零 AI 判断" },
+  { id: "deployer", name: "部署", group: "dev", model: "text", gpu_affinity: "gpu2", capabilities: ["build","deploy","environment_config","rollback"], tools: ["build_runner","deploy_runner","env_manager"], desc: "打包上线，构建 / 部署 / 环境配置 / 回滚" },
+  { id: "cleaner", name: "清洁员", group: "logistics", model: "text", gpu_affinity: "gpu2", capabilities: ["garbage_scan","unused_file_detection","duplicate_detection","safe_cleanup","build_verification"], tools: ["garbage_scanner","file_analyzer","cleanup_executor","protected_list_manager"], desc: "文件系统管家，临时文件 / 废弃文件 / 重复资源清理" },
+  { id: "hr_manager", name: "人事经理", group: "management", model: "text", gpu_affinity: "gpu2", capabilities: ["role_audit","prompt_optimization","role_add_remove","conversation_export","performance_analysis"], tools: ["role_editor","conversation_exporter","prompt_validator","diff_viewer"], desc: "角色元数据管理，审计 / 提示词优化 / 角色增删 / 对话导出" },
+  { id: "handoff_receiver", name: "项目接手员", group: "dev", model: "text", gpu_affinity: "gpu0", capabilities: ["code_reading","impact_assessment","scope_confirmation","modification_dispatch","backlog_tracking"], tools: ["dispatch_tools","inspector_scan","debt_tracker","backlog_manager"], desc: "项目接手员，只接已有项目。读代码 / 评估影响面 / 精准派单修改" },
+  { id: "experience_evaluator", name: "经验评估员", group: "general", model: "text", gpu_affinity: "gpu2", capabilities: ["experience_scoring","utility_judgement","knowledge_freshness_audit","memory_pruning"], tools: ["experience_manager","knowledge_base","memory_query"], desc: "任务收尾后为被引用的经验打效用分，审计知识新鲜度，淘汰失效记忆" }
+];
+
+const GROUP_COLOR = {
+  general: { bg: "#EEEDFE", fg: "#3C3489" },
+  dev: { bg: "#EAF3DE", fg: "#3B6D11" },
+  logistics: { bg: "#FAEEDA", fg: "#854F0B" },
+  management: { bg: "#FBEAF0", fg: "#993556" },
+};
+
+let CACHE = { workgroups: null, modules: null, agents: null, skins: null, health: null };
+
+// ===== fetch helpers =====
+async function safeGet(path) {
+  try {
+    const r = await fetch(path);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (e) { return null; }
+}
+
+// ===== 渲染：角色 =====
+function renderRoles() {
+  const groups = {};
+  ROLE_POOL.forEach(r => {
+    if (!groups[r.group]) groups[r.group] = [];
+    groups[r.group].push(r);
+  });
+  const groupNames = { general: "通用", dev: "开发", logistics: "后勤", management: "管理" };
+  const groupOrder = ["general", "dev", "logistics", "management"];
+  let html = "";
+  groupOrder.forEach(g => {
+    if (!groups[g]) return;
+    html += `<div style="margin-bottom:24px;"><div style="font-size:13px;color:#6b6b7e;font-weight:500;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">${groupNames[g]} · ${groups[g].length} 个角色</div><div class="card-grid">`;
+    groups[g].forEach(r => {
+      const color = GROUP_COLOR[r.group] || GROUP_COLOR.general;
+      const initial = r.name.substring(0, 1);
+      const degradeBadge = r.degraded ? `<span class="chip-degrade">⚠ 降级</span>` : "";
+      const degradeNote = r.degrade_note ? `<div style="margin-top:6px;font-size:11px;color:#993c1d;background:#faece7;padding:4px 8px;border-radius:4px;">${r.degrade_note}</div>` : "";
+      html += `
+        <div class="role-card${r.degraded ? ' degraded' : ''}">
+          <div class="head">
+            <div class="badge-icon" style="background:${color.bg};color:${color.fg};">${initial}</div>
+            <div style="flex:1;">
+              <div class="name">${r.name}${degradeBadge}</div>
+              <div class="id">${r.id}</div>
+            </div>
+            <span class="group-tag">${r.gpu_affinity}</span>
+          </div>
+          <div class="desc">${r.desc}</div>
+          <div class="chips">
+            ${r.capabilities.slice(0, 4).map(c => `<span class="chip cap">${c}</span>`).join("")}
+            ${r.capabilities.length > 4 ? `<span class="chip">+${r.capabilities.length - 4}</span>` : ""}
+          </div>
+          <div class="chips">
+            ${r.tools.slice(0, 3).map(t => `<span class="chip tool">${t}</span>`).join("")}
+            ${r.tools.length > 3 ? `<span class="chip">+${r.tools.length - 3}</span>` : ""}
+          </div>
+          ${degradeNote}
+          <div class="footer">
+            <span class="model-bind">→ ${r.model === 'vision' ? '需 VL-7B' : '14B (单卡共享)'}</span>
+            <span>model: ${r.model}</span>
+          </div>
+        </div>
+      `;
+    });
+    html += `</div></div>`;
+  });
+  return html;
+}
+
+// ===== 渲染：工作组 =====
+function renderWorkgroups() {
+  if (!CACHE.workgroups || !CACHE.workgroups.workgroups) {
+    return `<div class="empty-state">工作组 API 数据未载入，请检查后端是否在跑。</div>`;
+  }
+  const wgs = CACHE.workgroups.workgroups;
+  let html = `<div style="font-size:13px;color:#6b6b7e;margin-bottom:10px;">共 ${wgs.length} 个预设工作组 · 来自 <code>data/workgroups/*.json</code></div>`;
+  html += `<div class="card-grid">`;
+  wgs.forEach(w => {
+    const triggers = (w.trigger_keywords || []).slice(0, 5).join("、");
+    const triggerMore = (w.trigger_keywords || []).length > 5 ? ` 等 ${w.trigger_keywords.length} 个` : "";
+    html += `
+      <div class="role-card">
+        <div class="head">
+          <div class="badge-icon" style="background:#E6F1FB;color:#185FA5;">${w.name.substring(0,1)}</div>
+          <div style="flex:1;">
+            <div class="name">${w.name}</div>
+            <div class="id">${w.id}</div>
+          </div>
+          <span class="group-tag">${w.pipeline_steps} 步</span>
+        </div>
+        <div class="desc">${w.description || '(无描述)'}</div>
+        <div class="chips">
+          ${(w.members || []).map(m => `<span class="chip cap">${m}</span>`).join("")}
+        </div>
+        <div class="footer">
+          <span style="font-size:11px;">关键词：${triggers}${triggerMore}</span>
+        </div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+  return html;
+}
+
+// ===== 渲染：模块 =====
+function renderModules() {
+  if (!CACHE.modules) return `<div class="empty-state">模块 API 数据未载入。</div>`;
+  const { templates, categories } = CACHE.modules;
+  const tmpls = templates || [];
+  const cats = categories || [];
+  let html = `<div class="info-banner"><span class="label">${cats.length} 个分类 · ${tmpls.length} 个模板</span> · 这些模板由 <code>backend/core/module_engine/templates.py</code> 维护，前端可在「工作台 → 添加模块」弹窗选。</div>`;
+  cats.forEach(cat => {
+    const items = tmpls.filter(t => t.category === cat);
+    if (!items.length) return;
+    html += `<div style="margin-bottom:18px;"><div style="font-size:13px;color:#6b6b7e;font-weight:500;margin-bottom:8px;">${cat} <span style="color:#9b9ba8;">(${items.length})</span></div><div class="card-grid">`;
+    items.forEach(t => {
+      html += `
+        <div class="role-card" style="padding:12px 14px;">
+          <div class="head">
+            <div class="badge-icon" style="background:#E1F5EE;color:#0F6E56;width:24px;height:24px;font-size:11px;">${t.icon || '◇'}</div>
+            <div style="flex:1;"><div class="name" style="font-size:13px;">${t.name}</div><div class="id">${t.id}</div></div>
+          </div>
+          <div class="desc" style="font-size:11px;min-height:32px;">${t.description || ''}</div>
+        </div>
+      `;
+    });
+    html += `</div></div>`;
+  });
+  return html;
+}
+
+// ===== 渲染：Agent 实例 =====
+function renderAgents() {
+  if (!CACHE.agents) return `<div class="empty-state">Agent API 数据未载入。</div>`;
+  const items = CACHE.agents.agents || [];
+  let html = `<div class="info-banner">当前已注册的 Agent 实例（来自 <code>data/agents/</code> 目录扫描）。点 <span class="ref-link">+</span> 可创建新实例。</div>`;
+  if (items.length === 0) {
+    html += `<div class="empty-state">暂无 Agent 实例</div>`;
+  } else {
+    html += `<div class="card-grid">`;
+    items.forEach(a => {
+      html += `
+        <div class="role-card">
+          <div class="head">
+            <div class="badge-icon" style="background:#EEEDFE;color:#3C3489;">A</div>
+            <div style="flex:1;">
+              <div class="name">${a.name}</div>
+              <div class="id">${a.agent_id}</div>
+            </div>
+          </div>
+          <div class="desc">${a.description || '(无描述)'}</div>
+        </div>
+      `;
+    });
+    html += `</div>`;
+  }
+  return html;
+}
+
+// ===== 渲染：模型绑定 =====
+function renderModelBind() {
+  const groups = { gpu0: [], gpu1: [], gpu2: [] };
+  ROLE_POOL.forEach(r => {
+    if (groups[r.gpu_affinity]) groups[r.gpu_affinity].push(r);
+  });
+  let html = `
+    <div class="info-banner">
+      <div><span class="label">当前模式</span>：单 GPU 模式（<code>SINGLE_GPU_MODE=true</code>）</div>
+      <div style="margin-top:4px;"><code>backend/config/settings.py:resolve_inference_url()</code> 无视 <code>gpu_affinity</code>，全部走 <code>http://localhost:8000/v1</code></div>
+      <div style="margin-top:4px;">想切换多卡？编辑 <code>backend/.env</code> 设 <code>SINGLE_GPU_MODE=false</code> + 起 :8001/:8002 llama-server + 重启服务（成本较高，单卡场景不推荐）。</div>
+    </div>
+    <table class="model-table">
+      <thead>
+        <tr><th>GPU 亲和</th><th>设计模型</th><th>实际绑定</th><th>涉及角色</th><th>状态</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>gpu0</code></td>
+          <td>Qwen2.5-14B</td>
+          <td><code>Qwen2.5-14B-Instruct</code> @ :8000</td>
+          <td>${groups.gpu0.map(r => r.name).join('、')}</td>
+          <td class="ok">✓ 7 个角色正常</td>
+        </tr>
+        <tr>
+          <td><code>gpu1</code></td>
+          <td>Qwen2.5-7B + Qwen2.5-VL-7B</td>
+          <td><code>Qwen2.5-14B-Instruct</code> @ :8000 (单卡兜底)</td>
+          <td>${groups.gpu1.map(r => r.name).join('、')}</td>
+          <td class="warn">⚠ ${ROLE_POOL.filter(r=>r.gpu_affinity==='gpu1'&&r.degraded).length} 个角色能力降级 (visual_analyzer)</td>
+        </tr>
+        <tr>
+          <td><code>gpu2</code></td>
+          <td>Qwen2.5-7B</td>
+          <td><code>Qwen2.5-14B-Instruct</code> @ :8000 (单卡兜底)</td>
+          <td>${groups.gpu2.map(r => r.name).join('、')}</td>
+          <td class="ok">✓ 文本能力正常</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-top:16px;">
+      <details>
+        <summary>为什么要这样设计？（PROJECT_SPEC §2.3）</summary>
+        <pre>设计稿原计划 3 张卡（gpu0=14B, gpu1=7B+VL, gpu2=7B），每档承担不同角色。
+但本项目交付环境是 Radeon Cloud 单卡实例（Radeon PRO W7900 / 48GB），只起了 1 个
+llama-server (:8000, 14B)。
+
+为避免 "部署成功、演示炸场"（gpu1/gpu2 角色连不上 8001/8002 → Connection refused）：
+  • backend/config/settings.py 默认 SINGLE_GPU_MODE=True
+  • resolve_inference_url() 无视 gpu_affinity，统一打 8000
+  • 仅 visual_analyzer 标记降级（无 VL-7B 模型）
+  • 设计稿假设的多卡并行能力在单卡下不可用，但功能不崩
+
+用户在 8/05 反映"应可以只设置用一个模型" — 这就是当前的执行：
+  全 18 角色 → 唯一 14B 模型，没有多卡并发，但每个角色都能响应对话。</pre>
+      </details>
+    </div>
+  `;
+  return html;
+}
+
+// ===== Tab 切换 =====
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  const content = document.getElementById('tab-content');
+  switch (name) {
+    case 'roles': content.innerHTML = renderRoles(); break;
+    case 'workgroups': content.innerHTML = renderWorkgroups(); break;
+    case 'modules': content.innerHTML = renderModules(); break;
+    case 'agents': content.innerHTML = renderAgents(); break;
+    case 'model': content.innerHTML = renderModelBind(); break;
+  }
+}
+
+document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+
+// ===== 主入口 =====
+async function main() {
+  // 并行拉取 API
+  const [wg, mod, ag, sk, hl] = await Promise.all([
+    safeGet('/api/workgroups'),
+    safeGet('/api/modules/templates'),
+    safeGet('/api/agents'),
+    safeGet('/api/skins'),
+    safeGet('/api/health'),
+  ]);
+  CACHE.workgroups = wg; CACHE.modules = mod; CACHE.agents = ag; CACHE.skins = sk; CACHE.health = hl;
+
+  // 更新顶部 metric
+  document.getElementById('m-roles').textContent = ROLE_POOL.length;
+  document.getElementById('m-wgs').textContent = wg && wg.workgroups ? wg.workgroups.length : '--';
+  if (wg && wg.workgroups) document.getElementById('c-wgs').textContent = wg.workgroups.length;
+  if (mod) {
+    document.getElementById('m-modules').textContent = (mod.templates ? mod.templates.length : 0);
+    document.getElementById('c-modules').textContent = (mod.templates ? mod.templates.length : 0);
+  }
+  if (ag && ag.agents) {
+    document.getElementById('c-agents').textContent = ag.agents.length;
+  }
+  if (sk && sk.skins) {
+    document.getElementById('m-skins').textContent = sk.skins.length;
+  }
+
+  // 默认 tab
+  switchTab('roles');
+}
+
+main();
+</script>
+</body>
+</html>

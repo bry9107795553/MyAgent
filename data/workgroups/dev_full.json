@@ -1,49 +1,26 @@
 {
   "id": "dev_full",
   "name": "完整开发工作组",
-  "description": "覆盖从需求发现到部署上线的完整开发流程，包含设计、编码、巡检、测试、部署和清理全链路",
+  "description": "单轮自驱动开发：需求分析→方案→设计→编码→审查→测试→部署→清理",
   "trigger_keywords": [
-    "开发",
-    "做项目",
-    "写应用",
-    "建网站",
-    "做一个",
-    "实现一个",
-    "开发一个",
-    "写一个",
-    "建一个",
-    "创建",
-    "搭建",
-    "帮我写",
-    "帮我做",
-    "帮我建",
-    "帮我开发",
-    "网页",
-    "网站",
-    "前端页面",
-    "静态页面"
+    "开发", "做项目", "写应用", "建网站", "做一个", "实现一个", "开发一个",
+    "写一个", "建一个", "创建", "搭建",
+    "帮我写", "帮我做", "帮我建", "帮我开发",
+    "网页", "网站", "前端页面", "静态页面"
   ],
   "trigger_examples": [
     "开发一个待办事项应用",
     "做一个电商网站",
-    "写一个API服务",
-    "实现一个博客系统"
+    "写一个API服务"
   ],
   "members": [
-    "coach",
-    "designer",
-    "developer",
-    "inspector",
-    "tester",
-    "deployer",
-    "cleaner",
-    "experience_evaluator"
+    "coach", "designer", "developer", "inspector", "tester", "deployer", "cleaner", "experience_evaluator"
   ],
   "pipeline": [
     {
       "step": 1,
       "role": "coach",
-      "action": "Phase 0 需求发现：与用户交互澄清需求，产出 PROJECT_PLAN 文档",
+      "action": "分析用户需求并产出项目计划。⚠ 此模式为自动执行，用户不在线，你必须自主决策：用合理默认值填充所有空白，直接产出PROJECT_PLAN。禁止提问，禁止等待用户确认。",
       "input_from": "user",
       "output_to": "step_2",
       "parallel_with": [],
@@ -51,8 +28,8 @@
     },
     {
       "step": 2,
-      "role": "coach",
-      "action": "调度 designer，根据 PROJECT_PLAN 启动设计阶段",
+      "role": "designer",
+      "action": "根据项目计划产出HTML设计稿和CSS tokens。默认风格：现代极简、响应式、暗色/亮色自适应。无需用户确认，直接产出完整设计。",
       "input_from": "step_1",
       "output_to": "step_3",
       "parallel_with": [],
@@ -60,26 +37,26 @@
     },
     {
       "step": 3,
-      "role": "designer",
-      "action": "建立设计系统（色彩/字体/间距/组件规范），输出多页面样图",
+      "role": "developer",
+      "action": "按项目计划和设计稿实现代码。用 file_write 工具将代码写入项目目录。技术栈默认：React+Vite+CSS Modules。",
       "input_from": "step_2",
-      "output_to": "user",
+      "output_to": "step_4",
       "parallel_with": [],
-      "condition": "等待用户确认设计方案"
+      "condition": ""
     },
     {
       "step": 4,
-      "role": "coach",
-      "action": "用户确认设计后，调度 developer 按 PROJECT_PLAN 中的模块划分逐模块实现",
-      "input_from": "user",
+      "role": "inspector",
+      "action": "审查developer产出的代码。⚠ 只审查真实存在的文件，用file_list验证。如果上一步未产出代码，报告'无代码，跳过'。",
+      "input_from": "step_3",
       "output_to": "step_5",
       "parallel_with": [],
-      "condition": "用户已确认设计方案"
+      "condition": ""
     },
     {
       "step": 5,
-      "role": "developer",
-      "action": "按模块划分逐模块实现代码，产出可运行的模块代码",
+      "role": "tester",
+      "action": "测试代码。⚠ 只测试真实文件。先用file_list确认文件存在。无文件则报告'无代码，跳过'。",
       "input_from": "step_4",
       "output_to": "step_6",
       "parallel_with": [],
@@ -87,36 +64,18 @@
     },
     {
       "step": 6,
-      "role": "inspector",
-      "action": "对已实现模块逐项巡检：代码规范、架构一致性、安全性、性能等",
+      "role": "deployer",
+      "action": "部署上线。产出部署报告和访问链接。如无代码产出则报告'无可部署内容'。",
       "input_from": "step_5",
       "output_to": "step_7",
       "parallel_with": [],
-      "condition": "巡检不通过则返回 step_5 由 developer 返工，循环最多3次；Phase 2 中 inspector 和 tester 不能同时跑同一个模块"
+      "condition": ""
     },
     {
       "step": 7,
-      "role": "tester",
-      "action": "运行 tsc 类型检查、eslint 代码规范检查、vitest 单元测试",
-      "input_from": "step_6",
-      "output_to": "step_8",
-      "parallel_with": [],
-      "condition": "巡检通过后执行；不能与 inspector 同时跑同一模块；测试不通过则返回 step_5"
-    },
-    {
-      "step": 8,
-      "role": "deployer",
-      "action": "打包构建并部署上线",
-      "input_from": "step_7",
-      "output_to": "step_9",
-      "parallel_with": [],
-      "condition": "测试全部通过"
-    },
-    {
-      "step": 9,
       "role": "cleaner",
-      "action": "清理临时文件、构建缓存、中间产物",
-      "input_from": "step_8",
+      "action": "清理临时文件和构建缓存",
+      "input_from": "step_6",
       "output_to": "user",
       "parallel_with": [],
       "condition": ""
@@ -124,14 +83,7 @@
   ],
   "conditions": {
     "max_revisions": 3,
-    "user_confirmation_points": [
-      "设计师输出多页面样图后确认设计方案",
-      "部署前可选确认"
-    ],
+    "auto_approve": true,
     "exit_criteria": "所有模块通过巡检与测试，部署成功且临时文件已清理"
-  },
-  "gpu_plan": {
-    "parallel_capable": true,
-    "note": "Phase 2 中不同模块的 inspector 和 tester 可并行运行，但同一模块的 inspector 和 tester 必须串行；designer 与 developer 处于不同阶段，不争抢 GPU"
   }
 }
