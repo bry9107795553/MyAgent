@@ -9,8 +9,13 @@
       "group": "general",
       "model": "text",
       "gpu_affinity": "gpu0",
-      "capabilities": ["dispatch", "firewall", "aggregate", "progress_report"],
-      "tools": ["dispatch", "workgroup_manager", "memory_query", "user_interaction"],
+      "capabilities": [
+        "dispatch",
+        "firewall",
+        "aggregate",
+        "progress_report"
+      ],
+      "tools": [],
       "description": "前台接待+调度中心，接需求/分发/收结果/报进度/防火墙"
     },
     {
@@ -19,8 +24,15 @@
       "group": "dev",
       "model": "text",
       "gpu_affinity": "gpu0",
-      "capabilities": ["requirement_discovery", "competitive_research", "teaching", "cognitive_adaptation", "task_decomposition", "phase_dispatch"],
-      "tools": ["requirement_tools", "dispatch_tools", "teaching_tools", "phase_manager"],
+      "capabilities": [
+        "requirement_discovery",
+        "competitive_research",
+        "teaching",
+        "cognitive_adaptation",
+        "task_decomposition",
+        "phase_dispatch"
+      ],
+      "tools": [],
       "description": "产品教练+导师，需求发现三步走/教学/认知适配/调度开发团队Phase 0-3"
     },
     {
@@ -29,8 +41,15 @@
       "group": "general",
       "model": "text",
       "gpu_affinity": "gpu1",
-      "capabilities": ["rag_search", "web_search", "document_parsing", "source_verification"],
-      "tools": ["rag_engine", "web_search", "document_parser", "citation_tracker"],
+      "capabilities": [
+        "rag_search",
+        "web_search",
+        "document_parsing",
+        "source_verification"
+      ],
+      "tools": [
+        "web_search"
+      ],
       "description": "RAG+联网搜索，资料收集/多源搜索/文档解析"
     },
     {
@@ -39,8 +58,14 @@
       "group": "general",
       "model": "text",
       "gpu_affinity": "gpu0",
-      "capabilities": ["report_writing", "email_drafting", "copywriting", "style_adaptation", "revision"],
-      "tools": ["style_memory", "draft_generator", "format_converter"],
+      "capabilities": [
+        "report_writing",
+        "email_drafting",
+        "copywriting",
+        "style_adaptation",
+        "revision"
+      ],
+      "tools": [],
       "description": "报告/邮件/文案写作，风格记忆/初稿/修改"
     },
     {
@@ -49,8 +74,13 @@
       "group": "general",
       "model": "text",
       "gpu_affinity": "gpu2",
-      "capabilities": ["fact_checking", "logic_verification", "conflict_detection", "quality_assessment"],
-      "tools": ["fact_checker", "logic_analyzer", "quality_rules"],
+      "capabilities": [
+        "fact_checking",
+        "logic_verification",
+        "conflict_detection",
+        "quality_assessment"
+      ],
+      "tools": [],
       "description": "内容质量审查，事实核查/逻辑验证/冲突检测"
     },
     {
@@ -59,8 +89,13 @@
       "group": "general",
       "model": "text",
       "gpu_affinity": "gpu1",
-      "capabilities": ["schedule_scanning", "time_management", "reminder", "conflict_resolution"],
-      "tools": ["calendar_manager", "reminder_system", "user_habits"],
+      "capabilities": [
+        "schedule_scanning",
+        "time_management",
+        "reminder",
+        "conflict_resolution"
+      ],
+      "tools": [],
       "description": "时间管理/提醒/日程冲突检测"
     },
     {
@@ -69,8 +104,13 @@
       "group": "general",
       "model": "text",
       "gpu_affinity": "gpu0",
-      "capabilities": ["brainstorming", "solution_design", "insight_extraction", "preference_memory"],
-      "tools": ["idea_generator", "preference_store"],
+      "capabilities": [
+        "brainstorming",
+        "solution_design",
+        "insight_extraction",
+        "preference_memory"
+      ],
+      "tools": [],
       "description": "头脑风暴/方案设计/洞察提炼/偏好记忆"
     },
     {
@@ -79,8 +119,13 @@
       "group": "general",
       "model": "text",
       "gpu_affinity": "gpu1",
-      "capabilities": ["translation", "terminology_management", "localization", "quality_self_check"],
-      "tools": ["terminology_library", "translation_memory", "glossary"],
+      "capabilities": [
+        "translation",
+        "terminology_management",
+        "localization",
+        "quality_self_check"
+      ],
+      "tools": [],
       "description": "多语言翻译，术语库/翻译记忆/本地化"
     },
     {
@@ -89,8 +134,13 @@
       "group": "general",
       "model": "vision",
       "gpu_affinity": "gpu1",
-      "capabilities": ["image_analysis", "screenshot_review", "ui_evaluation", "visual_description"],
-      "tools": ["vision_model", "image_processor"],
+      "capabilities": [
+        "image_analysis",
+        "screenshot_review",
+        "ui_evaluation",
+        "visual_description"
+      ],
+      "tools": [],
       "description": "图片分析/截图审查/UI评估，需要多模态模型"
     },
     {
@@ -99,8 +149,15 @@
       "group": "dev",
       "model": "text",
       "gpu_affinity": "gpu0",
-      "capabilities": ["design_system", "page_inventory", "multi_page_mockup", "component_library", "responsive_design", "color_scheme"],
-      "tools": ["mockup_generator", "design_tokens", "contrast_checker", "template_manager"],
+      "capabilities": [
+        "design_system",
+        "page_inventory",
+        "multi_page_mockup",
+        "component_library",
+        "responsive_design",
+        "color_scheme"
+      ],
+      "tools": [],
       "description": "设计系统/多页面样图/组件库/响应式适配"
     },
     {
@@ -109,8 +166,19 @@
       "group": "dev",
       "model": "text",
       "gpu_affinity": "gpu0",
-      "capabilities": ["module_implementation", "bug_fix", "tech_debt_management", "safe_refactor", "dependency_management"],
-      "tools": ["code_exec", "file_read", "file_write", "file_list"],
+      "capabilities": [
+        "module_implementation",
+        "bug_fix",
+        "tech_debt_management",
+        "safe_refactor",
+        "dependency_management"
+      ],
+      "tools": [
+        "code_exec",
+        "file_read",
+        "file_write",
+        "file_list"
+      ],
       "description": "代码实现/返工修复/技术债管理/安全重构"
     },
     {
@@ -119,8 +187,14 @@
       "group": "dev",
       "model": "text",
       "gpu_affinity": "gpu2",
-      "capabilities": ["architecture_review", "code_inspection", "tech_debt_identification", "code_smell_detection", "verdict"],
-      "tools": ["code_analyzer", "standard_checker", "report_generator", "debt_marker"],
+      "capabilities": [
+        "architecture_review",
+        "code_inspection",
+        "tech_debt_identification",
+        "code_smell_detection",
+        "verdict"
+      ],
+      "tools": [],
       "description": "架构守门人，14项标准核查/技术债识别/代码级废弃检测"
     },
     {
@@ -129,8 +203,13 @@
       "group": "dev",
       "model": "text",
       "gpu_affinity": "gpu2",
-      "capabilities": ["compilation_check", "lint_check", "unit_test", "coverage_report"],
-      "tools": ["tsc_runner", "eslint_runner", "vitest_runner"],
+      "capabilities": [
+        "compilation_check",
+        "lint_check",
+        "unit_test",
+        "coverage_report"
+      ],
+      "tools": [],
       "description": "硬工具门禁，tsc/eslint/vitest，零AI判断"
     },
     {
@@ -139,8 +218,13 @@
       "group": "dev",
       "model": "text",
       "gpu_affinity": "gpu2",
-      "capabilities": ["build", "deploy", "environment_config", "rollback"],
-      "tools": ["build_runner", "deploy_runner", "env_manager"],
+      "capabilities": [
+        "build",
+        "deploy",
+        "environment_config",
+        "rollback"
+      ],
+      "tools": [],
       "description": "打包上线，构建/部署/环境配置/回滚"
     },
     {
@@ -149,8 +233,14 @@
       "group": "logistics",
       "model": "text",
       "gpu_affinity": "gpu2",
-      "capabilities": ["garbage_scan", "unused_file_detection", "duplicate_detection", "safe_cleanup", "build_verification"],
-      "tools": ["garbage_scanner", "file_analyzer", "cleanup_executor", "protected_list_manager"],
+      "capabilities": [
+        "garbage_scan",
+        "unused_file_detection",
+        "duplicate_detection",
+        "safe_cleanup",
+        "build_verification"
+      ],
+      "tools": [],
       "description": "文件系统管家，临时文件/废弃文件/重复资源清理"
     },
     {
@@ -159,8 +249,14 @@
       "group": "management",
       "model": "text",
       "gpu_affinity": "gpu2",
-      "capabilities": ["role_audit", "prompt_optimization", "role_add_remove", "conversation_export", "performance_analysis"],
-      "tools": ["role_editor", "conversation_exporter", "prompt_validator", "diff_viewer"],
+      "capabilities": [
+        "role_audit",
+        "prompt_optimization",
+        "role_add_remove",
+        "conversation_export",
+        "performance_analysis"
+      ],
+      "tools": [],
       "description": "角色元数据管理，审计/提示词优化/角色增删/对话导出/表现分析"
     },
     {
@@ -169,8 +265,14 @@
       "group": "dev",
       "model": "text",
       "gpu_affinity": "gpu0",
-      "capabilities": ["code_reading", "impact_assessment", "scope_confirmation", "modification_dispatch", "backlog_tracking"],
-      "tools": ["dispatch_tools", "inspector_scan", "debt_tracker", "backlog_manager"],
+      "capabilities": [
+        "code_reading",
+        "impact_assessment",
+        "scope_confirmation",
+        "modification_dispatch",
+        "backlog_tracking"
+      ],
+      "tools": [],
       "description": "项目接手员，只接已有项目。读代码/评估影响面/精准派单修改，与教练平行调度5人团队"
     },
     {
@@ -179,8 +281,13 @@
       "group": "general",
       "model": "text",
       "gpu_affinity": "gpu2",
-      "capabilities": ["experience_scoring", "utility_judgement", "knowledge_freshness_audit", "memory_pruning"],
-      "tools": ["experience_manager", "knowledge_base", "memory_query"],
+      "capabilities": [
+        "experience_scoring",
+        "utility_judgement",
+        "knowledge_freshness_audit",
+        "memory_pruning"
+      ],
+      "tools": [],
       "description": "任务收尾后为被引用的经验打效用分，审计知识新鲜度，淘汰失效记忆"
     }
   ],
@@ -189,19 +296,40 @@
       "model": "Qwen2.5-14B",
       "port": 8000,
       "description": "重活：教练/写作/创意/设计师/开发/接手员",
-      "roles": ["master", "coach", "writer", "creative", "designer", "developer", "handoff_receiver"]
+      "roles": [
+        "master",
+        "coach",
+        "writer",
+        "creative",
+        "designer",
+        "developer",
+        "handoff_receiver"
+      ]
     },
     "gpu1": {
       "model": "Qwen2.5-7B",
       "port": 8001,
       "description": "中活：检索/日程/翻译/视觉分析",
-      "roles": ["knowledge_retriever", "scheduler", "translator", "visual_analyzer"]
+      "roles": [
+        "knowledge_retriever",
+        "scheduler",
+        "translator",
+        "visual_analyzer"
+      ]
     },
     "gpu2": {
       "model": "Qwen2.5-7B",
       "port": 8002,
       "description": "轻活：质检/巡检/测试/部署/清洁/人事管理",
-      "roles": ["quality_checker", "inspector", "tester", "deployer", "cleaner", "hr_manager", "experience_evaluator"]
+      "roles": [
+        "quality_checker",
+        "inspector",
+        "tester",
+        "deployer",
+        "cleaner",
+        "hr_manager",
+        "experience_evaluator"
+      ]
     }
   },
   "model_requirements": {
