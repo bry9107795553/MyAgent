@@ -90,13 +90,6 @@
             </svg>
             <span>新建</span>
           </button>
-          <button class="action-btn" @click="showHistory = !showHistory" title="对话历史">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M8 4v4l2 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            <span>历史</span>
-          </button>
           <button class="action-btn danger" @click="deleteCurrentConversation" :disabled="!currentConversation" title="删除">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M3 4h10M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1m-7 0v9a1 1 0 001 1h6a1 1 0 001-1V4" stroke="currentColor" stroke-width="1.5"/>
@@ -106,25 +99,7 @@
         </div>
       </div>
 
-      <!-- 对话历史侧边面板 -->
-      <transition name="slide">
-        <div v-if="showHistory" class="history-panel">
-          <div class="history-head">
-            <h3>对话历史</h3>
-            <button class="close-btn" @click="showHistory = false">×</button>
-          </div>
-          <div v-if="conversationList.length === 0" class="history-empty">
-            <div class="empty-icon">📭</div>
-            <p>还没有历史对话</p>
-          </div>
-          <div v-for="conv in conversationList" :key="conv.id" class="history-item"
-               :class="{active: currentConversation?.id === conv.id}"
-               @click="loadConversation(conv)">
-            <div class="conv-title">{{ conv.title || '未命名对话' }}</div>
-            <div class="conv-meta">{{ conv.message_count || 0 }} 条 · {{ formatTime(conv.updated_at) }}</div>
-          </div>
-        </div>
-      </transition>
+      <!-- 对话历史侧边面板 (已移除——历史在右侧栏) -->
 
       <div class="messages" ref="msgEl">
         <div v-if="messages.length===0 && !streaming" class="empty-state">
@@ -206,18 +181,19 @@
       </div>
     </div>
 
-    <!-- ===== 右栏: 产出区 ===== -->
+    <!-- ===== 右栏: 产出区 / 对话历史 ===== -->
     <aside class="right-panel">
       <div class="rhead">
-        <div class="rhead-status">
+        <div class="rhead-status" v-if="pipelineActive || lastPipeline.length">
           <span v-if="pipelineActive" class="rhead-dot active"></span>
-          <span v-else-if="lastPipeline.length" class="rhead-dot done"></span>
-          <span v-else class="rhead-dot idle"></span>
-          <span class="rhead-label">
-            {{ pipelineActive ? '执行中' : lastPipeline.length ? '已完成' : '等待中' }}
-          </span>
+          <span v-else class="rhead-dot done"></span>
+          <span class="rhead-label">{{ pipelineActive ? '执行中' : '已完成' }}</span>
         </div>
-        <h3 class="rhead-title">产出区</h3>
+        <h3 class="rhead-title">{{ pipelineActive || lastPipeline.length ? '产出区' : '对话历史' }}</h3>
+        <button v-if="!pipelineActive && !lastPipeline.length" class="rhead-new-btn" @click="newConversation">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          新建
+        </button>
       </div>
 
       <div class="rbody" v-if="pipelineActive || lastPipeline.length">
@@ -237,9 +213,7 @@
             </div>
             <div class="step-info">
               <div class="step-role">{{ step.role }}</div>
-              <div class="step-status">
-                {{ step.s==='done' ? '完成' : step.s==='running' ? '执行中…' : step.s==='fail' ? '失败' : '等待' }}
-              </div>
+              <div class="step-status">{{ step.s==='done'?'完成':step.s==='running'?'执行中…':step.s==='fail'?'失败':'等待' }}</div>
             </div>
           </div>
         </div>
@@ -247,10 +221,8 @@
         <div v-if="selectedStep!==null && displaySteps[selectedStep]?.output" class="step-detail">
           <div class="detail-head">
             <span class="detail-role">{{ displaySteps[selectedStep].role }}</span>
-            <button v-if="hasHtmlCode(displaySteps[selectedStep].output)"
-                    class="detail-action"
-                    @click="previewHtml(displaySteps[selectedStep].output)">
-              {{ showPreview ? '📄 看源码' : '🌐 预览' }}
+            <button v-if="hasHtmlCode(displaySteps[selectedStep].output)" class="detail-action" @click="previewHtml(displaySteps[selectedStep].output)">
+              {{ showPreview ? '📄 源码' : '🌐 预览' }}
             </button>
           </div>
           <div v-if="showPreview && htmlContent" class="html-preview-frame">
@@ -260,15 +232,25 @@
         </div>
       </div>
 
-      <div class="rbody empty" v-else>
-        <div class="empty-illustration">
-          <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
-            <rect x="8" y="14" width="48" height="40" rx="4" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 3"/>
-            <path d="M20 28h24M20 36h16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
+      <!-- 对话历史（空闲时常驻） -->
+      <div class="rbody conv-history" v-else>
+        <div v-if="conversationList.length === 0" class="empty-r">
+          <p class="empty-r-text">还没有对话记录</p>
+          <p class="empty-r-sub">发送消息会自动保存</p>
         </div>
-        <p class="empty-r-text">工作组产出将在这里展示</p>
-        <p class="empty-r-sub">发送「程序开发」「代码审查」等关键词触发</p>
+        <div v-else class="conv-list">
+          <div v-for="conv in conversationList.slice(0, 100)" :key="conv.id" class="conv-item"
+               :class="{active: currentConversation?.id === conv.id}"
+               @click="loadConversation(conv)">
+            <div class="conv-body">
+              <div class="conv-title">{{ conv.title || '未命名对话' }}</div>
+              <div class="conv-meta">{{ (conv.messages||[]).length || 0 }} 条 · {{ formatTime(conv.updated_at) }}</div>
+            </div>
+            <button class="conv-delete" @click.stop="deleteConvById(conv.id)" title="删除">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M3 9l6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
       </div>
     </aside>
   </div>
@@ -328,7 +310,6 @@ function previewHtml(text) {
 // ---- 对话管理 ----
 const currentConversation=ref(null)
 const conversationList=ref([])
-const showHistory=ref(false)
 const STORAGE_KEY = 'myagent_conversations'
 
 function newConversation() {
@@ -378,7 +359,6 @@ function loadConversation(conv) {
   }
   currentConversation.value = { ...conv }
   messages.value = [...(conv.messages || [])]
-  showHistory.value = false
   nextTick(scroll)
 }
 
@@ -389,6 +369,17 @@ function deleteCurrentConversation() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(convs))
   currentConversation.value = null
   messages.value = []
+  refreshConversationList()
+}
+
+function deleteConvById(id) {
+  if (!confirm('删除此对话？')) return
+  const convs = loadFromStorage().filter(c => c.id !== id)
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(convs))
+  if (currentConversation.value?.id === id) {
+    currentConversation.value = null
+    messages.value = []
+  }
   refreshConversationList()
 }
 
@@ -934,4 +925,42 @@ onMounted(()=>{
 .detail-body * { max-width: 100%; }
 .html-preview-frame { border-top: 1px solid rgba(255,255,255,0.06); }
 .preview-iframe { width: 100%; height: 400px; border: none; background: #fff; }
+
+/* ==== 右侧对话历史 ==== */
+.conv-history { display: flex; flex-direction: column; }
+.empty-r { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 40px 20px; }
+.empty-r-text { font-size: 14px; color: #c8d8e8; margin-bottom: 4px; }
+.empty-r-sub { font-size: 12px; color: #6b7280; }
+
+.rhead-new-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 14px; font-size: 12px; font-weight: 500;
+  background: linear-gradient(135deg, #6c5ce7, #5a4dcf);
+  color: #fff; border: none; border-radius: 8px;
+  cursor: pointer; transition: all 0.15s;
+}
+.rhead-new-btn:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(108,92,231,.4); }
+
+.conv-list { display: flex; flex-direction: column; overflow-y: auto; }
+.conv-item {
+  display: flex; align-items: center; padding: 12px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  cursor: pointer; transition: background 0.15s; gap: 10px;
+}
+.conv-item:hover { background: rgba(255,255,255,0.03); }
+.conv-item.active {
+  background: linear-gradient(90deg, rgba(108,92,231,0.15), transparent);
+  border-left: 3px solid #6c5ce7;
+}
+.conv-body { flex: 1; min-width: 0; }
+.conv-title { font-size: 13px; color: #e8e8f0; font-weight: 500; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conv-meta { font-size: 11px; color: #8aa8c8; }
+.conv-delete {
+  width: 22px; height: 22px; border-radius: 5px;
+  background: none; border: none; color: #6b7280;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: all 0.15s; flex-shrink: 0;
+}
+.conv-item:hover .conv-delete { opacity: 1; }
+.conv-delete:hover { background: rgba(232,70,58,.2); color: #fca5a5; }
 </style>
