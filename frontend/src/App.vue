@@ -5,6 +5,7 @@
       <div class="app-logo">MyAgent</div>
       <nav class="app-nav">
         <router-link to="/" class="nav-item">对话</router-link>
+        <router-link to="/system" class="nav-item">系统</router-link>
         <router-link to="/workbench" class="nav-item">工作台</router-link>
         <router-link to="/skins" class="nav-item">皮肤</router-link>
       </nav>

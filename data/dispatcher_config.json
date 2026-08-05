@@ -145,7 +145,7 @@
     "parallel_matrix": {
       "gpu0_roles": ["master", "coach", "writer", "creative", "designer", "developer", "handoff_receiver"],
       "gpu1_roles": ["knowledge_retriever", "scheduler", "translator", "visual_analyzer"],
-      "gpu2_roles": ["quality_checker", "inspector", "tester", "deployer", "cleaner", "hr_manager"],
+      "gpu2_roles": ["quality_checker", "inspector", "tester", "deployer", "cleaner", "hr_manager", "experience_evaluator"],
       "max_parallel": 3,
       "description": "最多3个角色同时在不同GPU上并行执行"
     },

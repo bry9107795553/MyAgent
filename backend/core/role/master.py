@@ -1105,7 +1105,14 @@ class MasterRole(RoleBase):
         :return: 汇总后的文本
         """
         if not results:
-            return "抱歉，没有匹配到合适的角色来处理你的请求。"
+            # 区分两种空结果：没有匹配到角色 vs 角色执行全部失败
+            # 此方法调用的上游已确保 matched_roles 非空，故此处空 results = 执行失败而非匹配失败
+            return (
+                "抱歉，匹配到的角色未能成功执行任务。这通常是因为：\n"
+                "1. LLM 推理服务暂时不可用或超时\n"
+                "2. 任务对 14B 模型过于复杂\n"
+                "建议：简化请求或稍后重试。您也可以直接描述具体需求，我会尽力直接处理。"
+            )
 
         if len(results) == 1:
             return list(results.values())[0]

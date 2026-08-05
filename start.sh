@@ -80,14 +80,22 @@ else
     echo -e "  二进制: $LLAMA_SERVER"
     echo -e "  模型: $MODEL_FILE"
 
+    # 如果 start_llama.sh 存在，读取 setup 校准参数（覆盖默认值）
+    if [ -f "$SCRIPT_DIR/start_llama.sh" ]; then
+        echo "  ℹ 检测到 start_llama.sh，加载其校准参数"
+        source <(grep -E '^(MODEL|LLAMA_CPP_DIR|MODEL_ALIAS|CTX_SIZE|PARALLEL|NGL|BATCH_SIZE|LLAMA_PORT)=' "$SCRIPT_DIR/start_llama.sh" 2>/dev/null | sed 's/:=\([^}]\)/=-\1/; s/:-/:=/')
+    fi
+
     # 后台启动 llama-server (ROCm)
     CTX_SIZE="${CTX_SIZE:-8192}"
+    NGL="${NGL:-99}"
+    LLAMA_PORT="${LLAMA_PORT:-8000}"
     nohup "$LLAMA_SERVER" \
         -m "$MODEL_FILE" \
         -a "Qwen2.5-14B-Instruct" \
-        --port 8000 \
+        --port "$LLAMA_PORT" \
         -c "$CTX_SIZE" \
-        -ngl 99 \
+        -ngl "$NGL" \
         > /tmp/llama.log 2>&1 &
 
     LLAMA_PID=$!
