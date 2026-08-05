@@ -282,17 +282,19 @@ watch -n 1 rocm-smi
 
 ### 步骤 11：浏览器打开前端
 
-在**你自己的电脑**浏览器里访问：
+启动完成后，`start.sh` 会自动通过平台穿透工具 `rc-tunnel` 把 80 端口暴露成公网网址并打印出来（形如 `https://rc-xxxx.radeon.firstdg.ai`）。
+
+在你自己的电脑浏览器里访问那个网址：
 
 ```
-http://<实例的公网IP>/
+https://rc-xxxx.radeon.firstdg.ai
 ```
-
-实例 IP 在 Radeon Cloud 控制台能看到。也可以在实例里跑 `curl -s ifconfig.me` 查。
 
 **预期**：看到 MyAgent 的界面，能发消息、能收到回复。
 
-> 如果打不开但 `curl http://localhost/` 是 200 → 是云平台防火墙没放行 80 端口，去控制台的「安全组 / 端口映射」加一条 80 端口的入站规则。
+> 如果没看到 URL：在实例终端手动跑 `rc-tunnel expose --port 80`（若命令不存在，先 `/var/run/secrets/frp-self-service/install`）。
+> 注意：隧道空闲 60 秒会被回收，演示前重新 expose 一次即可。
+> 本机自检：`curl http://localhost/` 返回 200 即服务正常，打不开公网网址只可能是隧道未暴露，与代码无关。
 
 ### 步骤 12：记录基线信息（录屏和材料都要用）
 
