@@ -136,6 +136,10 @@ async def agent_websocket(websocket: WebSocket, agent_id: str):
         await websocket.close(code=4004, reason=f"Agent 不存在: {agent_id}")
         return
 
+    if not await llm_gateway.ensure_available():
+        await websocket.close(code=4503, reason="LLM 推理引擎未就绪")
+        return
+
     await message_bus.connect(websocket, agent_id)
     try:
         while True:
@@ -155,4 +159,6 @@ async def agent_websocket(websocket: WebSocket, agent_id: str):
             agent.save_memory()
 
     except WebSocketDisconnect:
+        pass
+    finally:
         await message_bus.disconnect(websocket, agent_id)

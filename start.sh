@@ -96,7 +96,7 @@ else
 
     # 等待 llama-server 就绪 (最多等 300 秒)
     for i in $(seq 1 300); do
-        if curl -s http://localhost:8000/v1/models > /dev/null 2>&1; then
+        if curl -s --max-time 3 http://localhost:8000/v1/models > /dev/null 2>&1; then
             echo -e "  ${GREEN}✓${NC} llama-server 已就绪 (${i}s)"
             break
         fi
@@ -139,13 +139,22 @@ else
 
     # 等待 FastAPI 就绪
     for i in $(seq 1 30); do
-        if curl -s http://localhost:8080/api/health > /dev/null 2>&1; then
+        if curl -s --max-time 3 http://localhost:8080/api/health > /dev/null 2>&1; then
             echo -e "  ${GREEN}✓${NC} FastAPI 已就绪 (${i}s)"
             break
         fi
+
+        # 检查后端进程是否还活着
+        if ! kill -0 $BACKEND_PID 2>/dev/null; then
+            echo -e "  ${RED}✗${NC} 后端进程异常退出"
+            echo -e "  请查看日志: tail -f /tmp/backend.log"
+            exit 1
+        fi
+
         sleep 1
         if [ $i -eq 30 ]; then
-            echo -e "  ${YELLOW}⚠${NC} FastAPI 启动超时，请查看日志: tail -f /tmp/backend.log"
+            echo -e "  ${RED}✗${NC} FastAPI 启动超时 (30s)，请查看日志: tail -f /tmp/backend.log"
+            exit 1
         fi
     done
 
@@ -227,6 +236,7 @@ if command -v rc-tunnel >/dev/null 2>&1; then
     # 注意：rc-tunnel expose 是持久化前台阻塞命令（隧道常驻），不能用 $(...) 捕获，
     # 否则脚本会永远等它退出而卡死。改为后台启动 + 读日志取 URL。
     nohup rc-tunnel expose --port 80 >"$RC_TUNNEL_LOG" 2>&1 &
+    echo $! > "$PID_DIR/tunnel.pid"
     sleep 6
     rc_tunnel_url=$(grep -oE 'https?://[^ ]+' "$RC_TUNNEL_LOG" | head -1 || true)
     if [ -n "$rc_tunnel_url" ]; then
@@ -241,6 +251,7 @@ elif [ -f /var/run/secrets/frp-self-service/install ]; then
     if [ -x /root/.local/bin/rc-tunnel ]; then
         export PATH="$HOME/.local/bin:$PATH"
         nohup rc-tunnel expose --port 80 >"$RC_TUNNEL_LOG" 2>&1 &
+        echo $! > "$PID_DIR/tunnel.pid"
         sleep 6
         rc_tunnel_url=$(grep -oE 'https?://[^ ]+' "$RC_TUNNEL_LOG" | head -1 || true)
         [ -n "$rc_tunnel_url" ] && echo -e "  ${GREEN}✓${NC} 外部访问地址: $rc_tunnel_url"

@@ -169,9 +169,10 @@ disconnect_network() {
         iptables -A OUTPUT -d 10.0.0.0/8 -j ACCEPT 2>/dev/null || true
         iptables -A OUTPUT -d 172.16.0.0/12 -j ACCEPT 2>/dev/null || true
         iptables -A OUTPUT -d 192.168.0.0/16 -j ACCEPT 2>/dev/null || true
+        iptables -A OUTPUT -p tcp --sport 22 -j ACCEPT 2>/dev/null || true  # 保留 SSH 自身连接
         iptables -A OUTPUT -j DROP 2>/dev/null || true
         DISCONNECTED=true
-        print_info "网络已断开 (iptables DROP)"
+        print_info "网络已断开 (iptables DROP, SSH 端口 22 例外)"
     else
         # 方法2: 修改 DNS（较温和的方式）
         print_info "无 root 权限，使用 DNS 屏蔽方式..."
@@ -202,8 +203,8 @@ reconnect_network() {
     fi
 }
 
-# 确保退出时恢复网络
-trap reconnect_network EXIT
+# 确保退出/SIGHUP/SIGINT/SIGTERM 时恢复网络
+trap reconnect_network EXIT HUP INT TERM
 
 # 断开网络
 disconnect_network

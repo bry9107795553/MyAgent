@@ -23,6 +23,13 @@ echo -e "${BLUE}  MyAgent 一键安装${NC}"
 echo -e "${BLUE}  AMD Radeon Cloud (无 Docker)${NC}"
 echo -e "${BLUE}========================================${NC}"
 
+# 云镜像常以 root 直接登录且未安装 sudo；有 sudo 才用，否则直接执行。
+if [ "$(id -u)" -eq 0 ] || ! command -v sudo >/dev/null 2>&1; then
+    SUDO=""
+else
+    SUDO="sudo"
+fi
+
 # 获取脚本所在目录的绝对路径
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo -e "  安装目录: ${SCRIPT_DIR}"
@@ -51,10 +58,10 @@ echo ""
 echo -e "${YELLOW}[2/7] 安装系统依赖...${NC}"
 
 # 更新包管理器
-sudo apt-get update -qq
+$SUDO apt-get update -qq
 
 # 安装基础工具
-sudo apt-get install -y -qq curl wget git nginx
+$SUDO apt-get install -y -qq curl wget git nginx
 
 # 检查 Node.js
 if command -v node &> /dev/null; then
@@ -62,8 +69,13 @@ if command -v node &> /dev/null; then
     echo -e "  ${GREEN}✓${NC} Node.js 已安装: $NODE_VERSION"
 else
     echo -e "  安装 Node.js 20.x ..."
-    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-    sudo apt-get install -y -qq nodejs
+    if [ -z "$SUDO" ]; then
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+        apt-get install -y -qq nodejs
+    else
+        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+        sudo apt-get install -y -qq nodejs
+    fi
     echo -e "  ${GREEN}✓${NC} Node.js 安装完成: $(node --version)"
 fi
 
@@ -289,9 +301,10 @@ echo -e "${YELLOW}[7/7] 配置 Nginx...${NC}"
 # 复制 Nginx 配置 (替换前端路径占位符为实际路径)
 FRONTEND_DIST="$SCRIPT_DIR/frontend/dist"
 sed "s|__FRONTEND_DIST__|${FRONTEND_DIST}|g" "$SCRIPT_DIR/nginx.conf" > /tmp/nginx_myagent.conf
-sudo cp /tmp/nginx_myagent.conf /etc/nginx/nginx.conf
+$SUDO cp -n /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak 2>/dev/null || true
+$SUDO cp /tmp/nginx_myagent.conf /etc/nginx/nginx.conf
 rm -f /tmp/nginx_myagent.conf
-sudo rm -f /etc/nginx/sites-enabled/default
+$SUDO rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
 
 # 创建数据目录
 mkdir -p "$SCRIPT_DIR/data/agents"

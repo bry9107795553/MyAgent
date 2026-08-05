@@ -33,7 +33,10 @@ async def lifespan(app: FastAPI):
 
     # 1. 初始化 LLM 网关 (连接 llama.cpp)
     print("\n[1/4] 初始化 LLM 网关...")
-    await llm_gateway.init()
+    try:
+        await asyncio.wait_for(llm_gateway.init(), timeout=15)
+    except asyncio.TimeoutError:
+        print("  ⚠ LLM 网关初始化超时 (15s)，将在首次请求时惰性连接")
 
     # 2. 初始化 Agent 注册表 (扫描目录 + 启动 watchdog)
     print("\n[2/4] 初始化 Agent 注册表...")

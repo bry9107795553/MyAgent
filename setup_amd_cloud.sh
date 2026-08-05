@@ -400,7 +400,7 @@ else
     downloaded=false
     for url in "${MODEL_URLS[@]}"; do
         echo "  尝试: ${url%%/resolve*}"
-        if wget -q --no-check-certificate --progress=dot:giga -c -O "$MODEL_FILE" "$url"; then
+        if wget -q --no-check-certificate --timeout=30 --tries=3 --progress=dot:giga -c -O "$MODEL_FILE" "$url"; then
             if check_gguf_magic "$MODEL_FILE"; then
                 downloaded=true
                 break
@@ -469,7 +469,11 @@ if command -v node &> /dev/null && command -v npm &> /dev/null; then
     echo "  ✓ npm: $(npm --version)"
 
     cd "$PROJECT_DIR/frontend"
-    if npm install --silent 2>&1 | tail -3 && npm run build 2>&1 | tail -5; then
+    npm install --silent 2>&1 | tail -3
+    npm_install_rc=${PIPESTATUS[0]}
+    npm run build 2>&1 | tail -5
+    npm_build_rc=${PIPESTATUS[0]}
+    if [ "$npm_install_rc" -eq 0 ] && [ "$npm_build_rc" -eq 0 ]; then
         if [ -d "$PROJECT_DIR/frontend/dist" ]; then
             FRONTEND_OK=1
             echo "  ✓ 前端构建完成 → $PROJECT_DIR/frontend/dist"
@@ -509,10 +513,11 @@ if command -v nginx &> /dev/null; then
     fi
 
     sed "s|__FRONTEND_DIST__|${FRONTEND_DIST}|g" "$PROJECT_DIR/nginx.conf" > /tmp/nginx_myagent.conf
-    sudo cp /tmp/nginx_myagent.conf /etc/nginx/nginx.conf
+    $SUDO cp -n /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak 2>/dev/null || true
+    $SUDO cp /tmp/nginx_myagent.conf /etc/nginx/nginx.conf
     rm -f /tmp/nginx_myagent.conf
-    sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
-    sudo nginx -t && echo "  ✓ Nginx 配置已就位 (端口 80)"
+    $SUDO rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+    $SUDO nginx -t && echo "  ✓ Nginx 配置已就位 (端口 80)"
 else
     warn "nginx 未安装，跳过。前端可用 'npx vite preview' 临时预览。"
 fi
@@ -646,7 +651,7 @@ bench_one() {
     payload=$(MSG="$msg" python3 -c 'import json,os;print(json.dumps({"message":os.environ["MSG"],"stream":False}))')
 
     start=$(date +%s%3N)
-    curl -s -X POST "$url" -H "Content-Type: application/json" -d "$payload" \
+    curl -s --max-time 300 -X POST "$url" -H "Content-Type: application/json" -d "$payload" \
         > "/tmp/bench_out_${variant}.json"
     end=$(date +%s%3N)
     elapsed=$(( end - start ))

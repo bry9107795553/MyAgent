@@ -143,7 +143,7 @@ class AgentRegistry:
                 print(f"[Registry] 保存记忆失败 {agent_id}: {e}")
         if self._observer:
             self._observer.stop()
-            self._observer.join()
+            self._observer.join(timeout=5)
         print("[Registry] 已关闭，所有 Agent 记忆已保存")
 
 
