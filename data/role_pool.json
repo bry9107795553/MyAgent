@@ -65,7 +65,10 @@
         "style_adaptation",
         "revision"
       ],
-      "tools": [],
+      "tools": [
+        "file_write",
+        "file_read"
+      ],
       "description": "报告/邮件/文案写作，风格记忆/初稿/修改"
     },
     {
@@ -157,7 +160,11 @@
         "responsive_design",
         "color_scheme"
       ],
-      "tools": [],
+      "tools": [
+        "file_write",
+        "file_read",
+        "file_list"
+      ],
       "description": "设计系统/多页面样图/组件库/响应式适配"
     },
     {
