@@ -194,7 +194,10 @@
         "code_smell_detection",
         "verdict"
       ],
-      "tools": [],
+      "tools": [
+        "file_read",
+        "file_list"
+      ],
       "description": "架构守门人，14项标准核查/技术债识别/代码级废弃检测"
     },
     {
@@ -209,7 +212,10 @@
         "unit_test",
         "coverage_report"
       ],
-      "tools": [],
+      "tools": [
+        "file_read",
+        "file_list"
+      ],
       "description": "硬工具门禁，tsc/eslint/vitest，零AI判断"
     },
     {
