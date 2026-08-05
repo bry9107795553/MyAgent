@@ -85,7 +85,8 @@ class SkinManager:
         """
         列出所有皮肤 (预置 + 用户自定义，从 data/skins/*.json 读取)
 
-        :return: 皮肤摘要列表 [{id, name, description, tags, preview_colors}, ...]
+        :return: 皮肤摘要列表 [{id, name, description, tags, preview_colors, variables}, ...]
+                 variables 也包含在摘要里，前端切换皮肤时无需再次请求详情
         """
         skins: list[dict] = []
         if not self.skins_dir.exists():
@@ -101,6 +102,7 @@ class SkinManager:
                     "description": skin.get("description", ""),
                     "tags": skin.get("tags", []),
                     "preview_colors": skin.get("preview_colors", []),
+                    "variables": skin.get("variables", {}),  # 一并返回，切换皮肤无需二次请求
                 })
             except (json.JSONDecodeError, OSError):
                 # 跳过损坏的皮肤文件

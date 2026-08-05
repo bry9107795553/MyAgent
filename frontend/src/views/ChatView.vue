@@ -48,6 +48,34 @@
 
     <!-- ===== 中栏: 对话 ===== -->
     <div class="chat-col">
+      <div class="chat-header">
+        <div class="chat-title">
+          <span v-if="currentConversation">对话 #{{ currentConversation.id }}</span>
+          <span v-else style="color: var(--text-2)">未命名对话</span>
+          <span v-if="messages.length" class="msg-count">{{ messages.length }}条</span>
+        </div>
+        <div class="chat-actions">
+          <button class="icon-btn" @click="newConversation" title="新建对话">+ 新建</button>
+          <button class="icon-btn" @click="showHistory = !showHistory" title="对话历史">📚 历史</button>
+          <button class="icon-btn danger" @click="deleteCurrentConversation" :disabled="!currentConversation" title="删除当前对话">🗑 删除</button>
+        </div>
+      </div>
+
+      <!-- 对话历史侧边面板 -->
+      <div v-if="showHistory" class="history-panel">
+        <div class="history-head">
+          <span>对话历史</span>
+          <button class="icon-btn" @click="showHistory = false">×</button>
+        </div>
+        <div v-if="conversationList.length === 0" class="history-empty">还没有历史对话</div>
+        <div v-for="conv in conversationList" :key="conv.id" class="history-item"
+             :class="{active: currentConversation?.id === conv.id}"
+             @click="loadConversation(conv)">
+          <div class="conv-title">{{ conv.title || '未命名对话' }}</div>
+          <div class="conv-meta">{{ conv.message_count || 0 }}条 · {{ formatTime(conv.updated_at) }}</div>
+        </div>
+      </div>
+
       <div class="messages" ref="msgEl">
         <div v-if="messages.length===0 && !streaming" class="empty">
           <div class="empty-icon">💬</div>
@@ -133,6 +161,83 @@ const streaming=ref(false),buf=ref(''),msgEl=ref(null),lastMeta=ref(null)
 const llmOnline=ref(false),modelName=ref('Qwen2.5-14B'),showSys=ref(false)
 const roles=ref([]),workgroups=ref([]),wgOpen=ref(true),roleOpen=ref(false)
 
+// ---- 对话管理 ----
+const currentConversation=ref(null)  // 当前对话 {id, title, messages, ...}
+const conversationList=ref([])      // 历史对话列表
+const showHistory=ref(false)         // 是否显示历史面板
+const STORAGE_KEY = 'myagent_conversations'
+
+// 创建新对话
+function newConversation() {
+  // 保存当前
+  if (currentConversation.value && messages.value.length > 0) {
+    saveCurrentToStorage()
+  }
+  // 新建
+  const conv = {
+    id: Date.now().toString(36),
+    title: '新对话 ' + new Date().toLocaleTimeString(),
+    agent_id: currentAgent.value,
+    messages: [],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+  currentConversation.value = conv
+  messages.value = []
+  streaming.value = false
+  buf.value = ''
+  saveCurrentToStorage()
+  refreshConversationList()
+}
+
+// 保存当前到 localStorage
+function saveCurrentToStorage() {
+  if (!currentConversation.value) return
+  currentConversation.value.messages = [...messages.value]
+  currentConversation.value.updated_at = new Date().toISOString()
+  const convs = loadFromStorage()
+  const idx = convs.findIndex(c => c.id === currentConversation.value.id)
+  if (idx >= 0) convs[idx] = currentConversation.value
+  else convs.unshift(currentConversation.value)
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(convs))
+}
+
+function loadFromStorage() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+  } catch { return [] }
+}
+
+function refreshConversationList() {
+  conversationList.value = loadFromStorage()
+}
+
+function loadConversation(conv) {
+  // 保存当前
+  if (currentConversation.value && currentConversation.value.id !== conv.id && messages.value.length > 0) {
+    saveCurrentToStorage()
+  }
+  currentConversation.value = { ...conv }
+  messages.value = [...(conv.messages || [])]
+  showHistory.value = false
+}
+
+function deleteCurrentConversation() {
+  if (!currentConversation.value) return
+  if (!confirm('确定删除当前对话？')) return
+  const convs = loadFromStorage().filter(c => c.id !== currentConversation.value.id)
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(convs))
+  currentConversation.value = null
+  messages.value = []
+  refreshConversationList()
+}
+
+function formatTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
 // pipeline output panel
 const pipelineActive=ref(false)
 const pipelineSteps=ref([])      // {role, status: 'pending'|'running'|'done'|'fail', output}
@@ -188,6 +293,18 @@ async function send(){
   const t=txt.value;txt.value='';messages.value.push({role:'user',content:t});scroll()
   streaming.value=true;buf.value=''
 
+  // 自动创建/复用当前对话
+  if(!currentConversation.value){
+    currentConversation.value={
+      id: Date.now().toString(36),
+      title: t.length>20 ? t.slice(0,20)+'...' : t,
+      agent_id: currentAgent.value,
+      messages:[],
+      created_at:new Date().toISOString(),
+      updated_at:new Date().toISOString(),
+    }
+  }
+
   // init pipeline panel
   pipelineActive.value=true
   pipelineSteps.value=[{role:'匹配中…',s:'running',output:''}]
@@ -210,6 +327,10 @@ async function send(){
       const final = buf.value
       messages.value.push({role:'assistant',content:final,meta:lastMeta.value||undefined})
       buf.value='';lastMeta.value=null;streaming.value=false;ws.close()
+
+      // 保存到对话历史
+      saveCurrentToStorage()
+      refreshConversationList()
 
       // finalize pipeline
       if(pipelineActive.value && pipelineSteps.value.length){
@@ -254,7 +375,15 @@ function parsePipelineOutput(text) {
 function sendQuick(t){txt.value=t;send()}
 function triggerWg(wg){txt.value=(wg.trigger_keywords||[])[0]||wg.id;send()}
 function scroll(){nextTick(()=>{if(msgEl.value)msgEl.value.scrollTop=msgEl.value.scrollHeight})}
-onMounted(()=>{loadAgents();loadSys();setInterval(loadSys,15000)})
+onMounted(()=>{
+  loadAgents();loadSys();setInterval(loadSys,15000)
+  refreshConversationList()
+  // 自动恢复最近的对话
+  const convs = loadFromStorage()
+  if(convs.length>0 && !currentConversation.value){
+    loadConversation(convs[0])
+  }
+})
 </script>
 
 <style scoped>
@@ -337,4 +466,45 @@ onMounted(()=>{loadAgents();loadSys();setInterval(loadSys,15000)})
 .detail-body{padding:10px;font-size:12px;line-height:1.6;color:var(--text-1);max-height:300px;overflow-y:auto}
 .empty-r{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:32px 16px}
 .empty-r-icon{font-size:40px}.empty-r-text{font-size:13px;color:var(--text-1);font-weight:500}.empty-r-sub{font-size:11px;color:var(--text-2)}
+
+/* ===== 对话头部 + 历史 ===== */
+.chat-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 16px; border-bottom: 1px solid var(--border);
+  background: var(--bg-1);
+}
+.chat-title { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-1); }
+.msg-count { font-size: 11px; color: var(--text-2); padding: 1px 6px; background: var(--bg-2); border-radius: 3px; }
+.chat-actions { display: flex; gap: 6px; }
+.icon-btn {
+  padding: 4px 10px; font-size: 12px; border: 1px solid var(--border);
+  border-radius: 4px; background: var(--bg-2); color: var(--text-1);
+  cursor: pointer; transition: all 0.15s;
+}
+.icon-btn:hover:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
+.icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.icon-btn.danger:hover:not(:disabled) { background: var(--error); border-color: var(--error); }
+
+.history-panel {
+  position: absolute; top: 40px; right: 16px;
+  width: 280px; max-height: 400px; overflow-y: auto;
+  background: var(--bg-1); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  z-index: 100;
+}
+.history-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  font-size: 13px; color: var(--text-0);
+}
+.history-empty { padding: 24px; text-align: center; color: var(--text-2); font-size: 12px; }
+.history-item {
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background 0.15s;
+}
+.history-item:hover { background: var(--bg-2); }
+.history-item.active { background: var(--accent); color: #fff; }
+.history-item.active .conv-meta { color: rgba(255,255,255,0.8); }
+.conv-title { font-size: 13px; color: var(--text-0); margin-bottom: 2px; }
+.conv-meta { font-size: 11px; color: var(--text-2); }
 </style>

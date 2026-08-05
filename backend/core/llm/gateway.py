@@ -170,6 +170,7 @@ class LLMGateway:
         choice = response.choices[0]
         result = {
             "content": choice.message.content or "",
+            "reasoning": getattr(choice.message, "reasoning_content", None) or "",
             "tool_calls": [],
         }
 

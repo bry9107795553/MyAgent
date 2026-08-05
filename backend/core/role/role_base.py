@@ -395,6 +395,12 @@ class RoleBase(ABC):
                 return last_content
 
             content = result.get("content") or ""
+            # 30B MoE 思考模式：若 content 为空，回退到 reasoning
+            if not content:
+                reasoning = result.get("reasoning") or ""
+                if reasoning:
+                    content = reasoning
+                    print(f"[Role:{self.id}] ℹ 30B 思考模式: content 为空，回退 reasoning ({len(reasoning)} chars)")
             last_content = content or last_content
             tool_calls = result.get("tool_calls") or []
 
@@ -503,6 +509,12 @@ class RoleBase(ABC):
                 return
 
             content = result.get("content") or ""
+            # 30B MoE 思考模式：若 content 为空，回退到 reasoning
+            if not content:
+                reasoning = result.get("reasoning") or ""
+                if reasoning:
+                    content = reasoning
+                    print(f"[Role:{self.id}] ℹ 流式模式回退 reasoning ({len(reasoning)} chars)")
             last_content = content or last_content
             tool_calls = result.get("tool_calls") or []
 
