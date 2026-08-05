@@ -513,8 +513,8 @@ onMounted(async () => {
 
   // 如果完全空，自动创建默认工作台
   if (store.modules.length === 0 && store.availableModules.length === 0 && store.templates.length > 0) {
-    // 从模板中选几个默认的自动加到工作台 (注意：后端返回的字段是 template 不是 id)
-    const defaultTemplateIds = ['note', 'kanban', 'calendar']
+    // 用真实存在的模板 ID
+    const defaultTemplateIds = ['category_notes_crud', 'kanban_task', 'calendar_schedule']
     for (const tid of defaultTemplateIds) {
       const tpl = store.templates.find(t => (t.template || t.id) === tid)
       if (tpl) {

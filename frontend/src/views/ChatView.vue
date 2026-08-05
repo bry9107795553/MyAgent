@@ -425,10 +425,14 @@ onMounted(()=>{
 .pills{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:6px}
 .pill{padding:5px 14px;background:var(--bg-1);border:1px solid var(--border);border-radius:16px;font-size:12px;color:var(--text-1);cursor:pointer;transition:all .12s}
 .pill:hover{border-color:var(--accent);color:var(--accent)}
-.msg{margin-bottom:14px;max-width:78%}.msg.user{margin-left:auto}
-.bubble{padding:9px 14px;border-radius:10px;font-size:13px;line-height:1.6}
+.msg{margin-bottom:14px;max-width:78%;min-width:0;overflow:hidden}.msg.user{margin-left:auto}
+.bubble{padding:9px 14px;border-radius:10px;font-size:13px;line-height:1.6;max-width:100%;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word;white-space:pre-wrap;overflow-x:auto}
+.bubble *{max-width:100%;word-wrap:break-word;overflow-wrap:break-word}
+.bubble table{display:block;max-width:100%;overflow-x:auto}
+.bubble pre{white-space:pre-wrap;word-break:break-word;max-width:100%;overflow-x:auto}
+.bubble code{white-space:pre-wrap;word-break:break-all}
 .msg.user .bubble{background:var(--accent);color:#fff;border-bottom-right-radius:2px}
-.msg.assistant .bubble{background:var(--bg-1);border:1px solid var(--border);border-bottom-left-radius:2px}
+.msg.assistant .bubble{background:var(--bg-1);border:1px solid var(--border);border-bottom-left-radius:2px;word-break:break-word}
 .c{animation:blink 1s infinite}@keyframes blink{50%{opacity:0}}
 .msg-meta{margin-top:4px;padding-left:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .mtag{padding:2px 7px;background:rgba(108,92,231,.1);border:1px solid rgba(108,92,231,.2);border-radius:8px;font-size:10px;color:var(--accent)}
