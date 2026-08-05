@@ -1,6 +1,6 @@
 <template>
   <div class="agent-platform">
-    <!-- ===== 左栏: 系统状态 + 智能体 + 工作组 + 角色 ===== -->
+    <!-- ===== 左栏: 系统状态 + 智能体 ===== -->
     <aside class="left-panel">
       <!-- 系统状态卡 -->
       <div class="system-card" :class="{ online: llmOnline }">
@@ -32,41 +32,27 @@
         </button>
       </div>
 
-      <!-- 智能体 -->
+      <!-- 智能体 + 新建按钮 -->
       <div class="sidebar-section">
         <div class="section-header">
           <h3>智能体</h3>
           <span class="section-badge">{{ agents.length }}</span>
+          <button class="section-new-btn" @click="newConversation" title="新建对话">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M6 2v8M2 6h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </button>
         </div>
         <div class="agent-list">
           <div v-for="a in agents" :key="a.agent_id" class="agent-card"
                :class="{ active: currentAgent===a.agent_id }"
                @click="selectAgent(a.agent_id)">
-            <div class="agent-avatar">🤖</div>
+            <div class="agent-avatar">
+              <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="8" width="16" height="12" rx="2.5" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="14" r="1.5" fill="currentColor"/><circle cx="15" cy="14" r="1.5" fill="currentColor"/><path d="M12 8V4M9 4h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M2 13h2M20 13h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </div>
             <div class="agent-info">
               <div class="agent-name">{{ a.name }}</div>
               <div class="agent-desc">{{ a.description }}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 工作组 -->
-      <div class="sidebar-section">
-        <div class="section-header" @click="wgOpen=!wgOpen">
-          <h3>工作组</h3>
-          <span class="section-badge">{{ workgroups.length }}</span>
-          <svg :class="{rotated: wgOpen}" width="12" height="12" viewBox="0 0 12 12" class="section-arrow">
-            <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none"/>
-          </svg>
-        </div>
-        <div v-if="wgOpen" class="workgroup-list">
-          <div v-for="wg in workgroups" :key="wg.id" class="workgroup-card" @click="triggerWg(wg)">
-            <div class="wg-name">{{ wg.name }}</div>
-            <div class="wg-desc">{{ wg.description || '自动编排多角色协作' }}</div>
-            <div class="wg-footer">
-              <span class="wg-steps">{{ wg.pipeline_steps }} 步</span>
-              <span class="wg-kws">{{ (wg.trigger_keywords||[]).slice(0,2).join(' · ') }}</span>
             </div>
           </div>
         </div>
@@ -75,6 +61,18 @@
 
     <!-- ===== 中栏: 对话 ===== -->
     <div class="chat-col">
+      <!-- 工作组顶部横栏 -->
+      <div class="workgroup-bar">
+        <span class="wg-bar-label">工作组</span>
+        <button v-for="wg in workgroups" :key="wg.id" class="wg-chip" @click="triggerWg(wg)" :title="wg.description">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <path d="M3 9h18M3 15h18M9 3v18M15 3v18" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+          <span class="wg-chip-name">{{ wg.name }}</span>
+          <span class="wg-chip-steps">{{ wg.pipeline_steps }}步</span>
+        </button>
+      </div>
+
       <div class="chat-header">
         <div class="chat-title-area">
           <h2 class="chat-title">
@@ -82,20 +80,6 @@
             <span v-else class="title-placeholder">未命名对话</span>
           </h2>
           <span v-if="messages.length" class="msg-count">{{ messages.length }} 条消息</span>
-        </div>
-        <div class="chat-actions">
-          <button class="action-btn" @click="newConversation" title="新建对话">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            <span>新建</span>
-          </button>
-          <button class="action-btn danger" @click="deleteCurrentConversation" :disabled="!currentConversation" title="删除">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M3 4h10M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1m-7 0v9a1 1 0 001 1h6a1 1 0 001-1V4" stroke="currentColor" stroke-width="1.5"/>
-            </svg>
-            <span>删除</span>
-          </button>
         </div>
       </div>
 
@@ -264,7 +248,7 @@ import {marked} from 'marked'
 const agents=ref([]),currentAgent=ref(''),messages=ref([]),txt=ref('')
 const streaming=ref(false),buf=ref(''),msgEl=ref(null),inputEl=ref(null),lastMeta=ref(null)
 const llmOnline=ref(false),modelName=ref('Qwen3-30B-A3B'),showSys=ref(false)
-const roles=ref([]),workgroups=ref([]),wgOpen=ref(true)
+const roles=ref([]),workgroups=ref([])
 
 // pipeline output panel
 const pipelineActive=ref(false)
@@ -581,6 +565,38 @@ onMounted(()=>{
 }
 .section-arrow { margin-left: auto; color: #9ca3af; transition: transform 0.2s; }
 .section-arrow.rotated { transform: rotate(180deg); }
+.section-new-btn {
+  margin-left: auto; width: 24px; height: 24px; border-radius: 6px;
+  background: #4f46e5; color: #fff; border: none;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.15s;
+}
+.section-new-btn:hover { background: #6366f1; transform: scale(1.05); }
+
+/* ==== 工作组顶部横栏 ==== */
+.workgroup-bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 24px; background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb; flex-shrink: 0;
+  overflow-x: auto;
+}
+.workgroup-bar::-webkit-scrollbar { height: 4px; }
+.wg-bar-label { font-size: 11px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; margin-right: 4px; }
+.wg-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; background: #fff;
+  border: 1px solid #e5e7eb; border-radius: 16px;
+  font-size: 12px; color: #4b5563;
+  cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+  white-space: nowrap;
+}
+.wg-chip:hover {
+  background: #eef2ff; border-color: #c7d2fe; color: #4f46e5;
+  transform: translateY(-1px);
+}
+.wg-chip svg { color: #4f46e5; flex-shrink: 0; }
+.wg-chip-name { font-weight: 500; }
+.wg-chip-steps { font-size: 10px; color: #9ca3af; padding: 1px 5px; background: #f3f4f6; border-radius: 8px; }
 
 /* 智能体列表 */
 .agent-list { display: flex; flex-direction: column; gap: 4px; }
@@ -804,7 +820,7 @@ onMounted(()=>{
 .meta-badge { color: #10b981; font-weight: 600; }
 
 /* 输入栏 */
-.input-bar { padding: 16px 24px 20px; flex-shrink: 0; }
+.input-bar { padding: 8px 24px 12px; flex-shrink: 0; background: #fff; border-top: 1px solid #e5e7eb; }
 .input-wrap {
   display: flex; align-items: flex-end; gap: 10px;
   background: #f9fafb;
