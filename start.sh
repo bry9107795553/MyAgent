@@ -81,11 +81,12 @@ else
     echo -e "  模型: $MODEL_FILE"
 
     # 后台启动 llama-server (ROCm)
+    CTX_SIZE="${CTX_SIZE:-8192}"
     nohup "$LLAMA_SERVER" \
         -m "$MODEL_FILE" \
         -a "Qwen2.5-14B-Instruct" \
         --port 8000 \
-        -c 32768 \
+        -c "$CTX_SIZE" \
         -ngl 99 \
         > /tmp/llama.log 2>&1 &
 
@@ -215,4 +216,29 @@ echo "    tail -f /tmp/llama.log   → llama-server 日志"
 echo "    tail -f /tmp/backend.log → 后端日志"
 echo ""
 echo "  停止服务: bash stop.sh"
+echo ""
+
+# ===== 外部访问（可选，非致命）=====
+# Radeon Cloud 实例默认只开放 Jupyter(8888)，需用平台穿透工具 rc-tunnel 暴露 80。
+# 检测 rc-tunnel 是否存在，存在则自动暴露并打印公网 URL；不存在则跳过并提示。
+if command -v rc-tunnel >/dev/null 2>&1; then
+    echo -e "${BLUE}→ 正在通过 rc-tunnel 暴露前端 (端口 80)...${NC}"
+    rc_tunnel_url=$(rc-tunnel expose --port 80 2>/dev/null | grep -oE 'https?://[^ ]+' | head -1 || true)
+    if [ -n "$rc_tunnel_url" ]; then
+        echo -e "  ${GREEN}✓${NC} 外部访问地址: $rc_tunnel_url"
+        echo -e "  ${YELLOW}⚠${NC} 隧道空闲 60s 会回收，演示前请重新运行: rc-tunnel expose --port 80"
+    else
+        echo -e "  ${YELLOW}⚠${NC} rc-tunnel 未返回 URL，手动运行: rc-tunnel expose --port 80"
+    fi
+elif [ -f /var/run/secrets/frp-self-service/install ]; then
+    echo -e "${BLUE}→ 安装 rc-tunnel...${NC}"
+    /var/run/secrets/frp-self-service/install >/dev/null 2>&1 || true
+    if [ -x /root/.local/bin/rc-tunnel ]; then
+        export PATH="$HOME/.local/bin:$PATH"
+        rc_tunnel_url=$(rc-tunnel expose --port 80 2>/dev/null | grep -oE 'https?://[^ ]+' | head -1 || true)
+        [ -n "$rc_tunnel_url" ] && echo -e "  ${GREEN}✓${NC} 外部访问地址: $rc_tunnel_url"
+    fi
+else
+    echo -e "  ${YELLOW}⚠${NC} 未检测到 rc-tunnel，如需外部访问请运行: rc-tunnel expose --port 80"
+fi
 echo ""

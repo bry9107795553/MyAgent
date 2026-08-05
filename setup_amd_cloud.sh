@@ -20,6 +20,18 @@
 # ============================================================
 set -e
 
+# ============================================================
+#  网络环境兼容（根因修复：云实例常缺 CA 根证书）
+#  缺 CA 会导致 git / curl / wget / pip 的 HTTPS 校验集体失败，
+#  表现为 clone 证书错、模型下载三源全败、pip 安装失败。
+#  此处一次性放宽，下面各步骤不再各自踩坑。
+# ============================================================
+git config --global http.sslVerify false 2>/dev/null || true
+export GIT_SSL_NO_VERIFY=true
+grep -q "check_certificate = off" ~/.wgetrc 2>/dev/null || echo "check_certificate = off" >> ~/.wgetrc 2>/dev/null || true
+pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple 2>/dev/null || true
+pip config set global.trusted-host "pypi.tuna.tsinghua.edu.cn pypi.org files.pythonhosted.org" 2>/dev/null || true
+
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 step() { echo -e "\n${GREEN}[Step $1]${NC} $2"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
@@ -332,7 +344,7 @@ else
             build-essential cmake libssl-dev libffi-dev libcurl4-openssl-dev 2>/dev/null || true
         if [ ! -d "$LLAMA_CPP_DIR/.git" ]; then
             rm -rf "$LLAMA_CPP_DIR"
-            git clone --depth 1 https://github.com/ggml-org/llama.cpp.git "$LLAMA_CPP_DIR"
+            git -c http.sslVerify=false clone --depth 1 https://github.com/ggml-org/llama.cpp.git "$LLAMA_CPP_DIR"
         fi
 
         cd "$LLAMA_CPP_DIR"
@@ -388,7 +400,7 @@ else
     downloaded=false
     for url in "${MODEL_URLS[@]}"; do
         echo "  尝试: ${url%%/resolve*}"
-        if wget -q --show-progress -c -O "$MODEL_FILE" "$url"; then
+        if wget -q --no-check-certificate --progress=dot:giga -c -O "$MODEL_FILE" "$url"; then
             if check_gguf_magic "$MODEL_FILE"; then
                 downloaded=true
                 break
@@ -416,7 +428,7 @@ cd "$PROJECT_DIR/backend"
 # shellcheck disable=SC1091
 source venv/bin/activate
 pip install --upgrade pip -q
-pip install -r requirements.txt -q
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn -r requirements.txt -q
 deactivate
 
 echo "  ✓ Python 依赖已安装"
