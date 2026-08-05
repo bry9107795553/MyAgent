@@ -294,3 +294,73 @@ class FileListTool(BaseTool):
             return {"success": False, "error": f"路径不是目录: {path}"}
         except Exception as e:
             return {"success": False, "error": f"列目录失败: {e}"}
+
+
+# ===== 文件删除工具 =====
+
+class FileDeleteTool(BaseTool):
+    """删除文件或空目录工具"""
+
+    @property
+    def name(self) -> str:
+        return "file_delete"
+
+    @property
+    def config_key(self) -> str:
+        # 删除属于写入类操作，复用 file_write 配置开关
+        return "file_write"
+
+    @property
+    def description(self) -> str:
+        return (
+            "删除指定文件或空目录。仅允许删除项目根目录内的文件。"
+            "删除操作不可逆，请谨慎使用。"
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "要删除的文件或空目录路径 (相对路径基于项目根目录)",
+                },
+            },
+            "required": ["path"],
+        }
+
+    async def execute(self, path: str) -> dict:
+        """删除文件或空目录"""
+        file_path = _resolve_path(path)
+
+        if not _is_within_project(file_path):
+            return {
+                "success": False,
+                "error": f"安全限制：仅允许删除项目根目录内的文件: {path}",
+            }
+
+        try:
+            if not file_path.exists():
+                return {"success": False, "error": f"文件不存在: {path}"}
+
+            is_dir = file_path.is_dir()
+            size = file_path.stat().st_size if not is_dir else 0
+
+            if is_dir:
+                file_path.rmdir()  # 只删空目录
+            else:
+                file_path.unlink()
+
+            return {
+                "success": True,
+                "path": str(file_path),
+                "type": "directory" if is_dir else "file",
+                "size": size,
+            }
+        except OSError as e:
+            # rmdir 失败通常是目录非空
+            hint = "目录非空，请先清空内容" if is_dir else ""
+            return {"success": False, "error": f"删除失败: {e}", "hint": hint}
+        except Exception as e:
+            return {"success": False, "error": f"删除失败: {e}"}

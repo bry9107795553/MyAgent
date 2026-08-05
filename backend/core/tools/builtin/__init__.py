@@ -6,11 +6,12 @@
     - file_read:   FileReadTool   读取文件内容
     - file_write:  FileWriteTool  写入文件内容
     - file_list:   FileListTool   列出目录文件
-    - web_search:  WebSearchTool  网页搜索 (占位)
+    - file_delete: FileDeleteTool 删除文件或空目录
+    - web_search:  WebSearchTool  本地知识库搜索
     - code_exec:   CodeExecTool   执行 Python 代码
 """
 from core.tools.base import tool_registry
-from core.tools.builtin.file_tools import FileReadTool, FileWriteTool, FileListTool
+from core.tools.builtin.file_tools import FileReadTool, FileWriteTool, FileListTool, FileDeleteTool
 from core.tools.builtin.search_tools import WebSearchTool
 from core.tools.builtin.code_tools import CodeExecTool
 
@@ -18,6 +19,7 @@ from core.tools.builtin.code_tools import CodeExecTool
 tool_registry.register(FileReadTool())
 tool_registry.register(FileWriteTool())
 tool_registry.register(FileListTool())
+tool_registry.register(FileDeleteTool())
 tool_registry.register(WebSearchTool())
 tool_registry.register(CodeExecTool())
 
@@ -25,6 +27,7 @@ __all__ = [
     "FileReadTool",
     "FileWriteTool",
     "FileListTool",
+    "FileDeleteTool",
     "WebSearchTool",
     "CodeExecTool",
 ]

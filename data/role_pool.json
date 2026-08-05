@@ -224,7 +224,11 @@
         "environment_config",
         "rollback"
       ],
-      "tools": [],
+      "tools": [
+        "code_exec",
+        "file_read",
+        "file_list"
+      ],
       "description": "打包上线，构建/部署/环境配置/回滚"
     },
     {
@@ -240,7 +244,11 @@
         "safe_cleanup",
         "build_verification"
       ],
-      "tools": [],
+      "tools": [
+        "file_read",
+        "file_write",
+        "file_list"
+      ],
       "description": "文件系统管家，临时文件/废弃文件/重复资源清理"
     },
     {

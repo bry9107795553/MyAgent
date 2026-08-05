@@ -29,9 +29,12 @@ from typing import Optional
 
 # ===== 本地推理硬约束 =====
 
+# 推理模式: "local"（仅本机 GGUF）或 "api"（允许远程 API）
+# 可通过 .env 中的 INFERENCE_MODE 环境变量覆盖
+# 注意: AMD 黑客松赛道二要求 local 模式，参赛时请勿改为 api
 LOCAL_INFERENCE_ONLY = True
 
-# 唯一允许的推理服务主机名。任何其他地址一律拒绝。
+# 唯一允许的本地推理主机名
 ALLOWED_INFERENCE_HOSTS = frozenset({
     "localhost",
     "127.0.0.1",
@@ -40,27 +43,48 @@ ALLOWED_INFERENCE_HOSTS = frozenset({
     "[::1]",
 })
 
+# 运行时推理模式开关（从 .env 读取，默认 local）
+_inference_mode_override: Optional[str] = None
+
+
+def get_inference_mode() -> str:
+    """获取当前推理模式: 'local' | 'api'"""
+    return _inference_mode_override or "local"
+
+
+def set_inference_mode(mode: str):
+    """设置推理模式 (仅允许 'local' 或 'api')"""
+    global _inference_mode_override
+    mode = mode.strip().lower()
+    if mode not in ("local", "api"):
+        raise ValueError(f"无效的推理模式: {mode!r}，仅支持 'local' 或 'api'")
+    _inference_mode_override = mode
+
 
 class RemoteInferenceForbidden(RuntimeError):
-    """试图把推理请求指向非本机地址时抛出（赛道合规硬约束）"""
+    """试图在 local 模式下把推理请求指向非本机地址时抛出"""
 
 
 def assert_local_endpoint(base_url: str) -> str:
     """
-    强制校验推理端点必须是本机地址。
+    校验推理端点。
 
-    这是赛道「核心推理不允许使用远程 API」的代码级执行点，
-    不是注释、不是开关 —— 违反即抛异常，服务起不来。
+    - local 模式：强制本机地址，非本机直接抛异常
+    - api 模式：不校验，允许任意地址
 
     :param base_url: 待校验的推理服务 URL
-    :return: 原样返回 base_url（校验通过时）
-    :raises RemoteInferenceForbidden: base_url 指向非本机地址
+    :return: 原样返回 base_url
+    :raises RemoteInferenceForbidden: local 模式下指向非本机地址
     """
+    if get_inference_mode() == "api":
+        return base_url
+
     host = (urlparse(base_url).hostname or "").lower()
     if host not in ALLOWED_INFERENCE_HOSTS:
         raise RemoteInferenceForbidden(
             f"拒绝远程推理端点: {base_url!r} (host={host!r})。\n"
-            f"本项目仅允许本机 llama.cpp 推理，"
+            f"当前为 local 模式，仅允许本机推理。\n"
+            f"如需接入远程 API，请设置: INFERENCE_MODE=api\n"
             f"允许的主机名: {sorted(ALLOWED_INFERENCE_HOSTS)}"
         )
     return base_url
@@ -119,19 +143,21 @@ class Settings(BaseSettings):
     port: int = 8080
     debug: bool = True
 
-    # llama.cpp 配置 (本地推理引擎 — 本项目唯一的推理后端)
-    # llama-server 提供 OpenAI 兼容接口，使用 -a 参数指定模型名
-    # base_url 受 assert_local_endpoint() 强制约束，只能是本机地址
+    # 推理模式: "local" (本机 GGUF，默认) 或 "api" (远程 API)
+    # 从 .env / 环境变量 INFERENCE_MODE 读取
+    inference_mode: str = "local"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        set_inference_mode(self.inference_mode)
+        print(f"[Settings] 推理模式: {self.inference_mode}")
+
+    # llama.cpp / API 配置
+    # base_url 在 local 模式下受 assert_local_endpoint() 约束
     llama_base_url: str = "http://localhost:8000/v1"
     llama_model: str = "Qwen2.5-14B-Instruct"
     llama_api_key: str = "EMPTY"                       # llama-server 不需要 key
     llama_timeout: int = 120
-
-    # 【已物理移除】云端 API 降级配置
-    # 原先此处有 cloud_api_base_url / cloud_api_model / cloud_api_key /
-    # cloud_api_enabled 四个字段，指向智谱 GLM-4。
-    # 依据赛道规则「核心推理不允许使用远程 API」，整条降级通道已从
-    # settings / gateway / models.yaml / 部署脚本中彻底删除，不保留开关。
 
     # ===== GPU 路由模式 =====
     #

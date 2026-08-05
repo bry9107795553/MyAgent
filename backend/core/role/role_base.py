@@ -448,12 +448,117 @@ class RoleBase(ABC):
         return last_content
 
     async def _call_llm_stream(self, ctx: RoleContext) -> AsyncGenerator[str, None]:
-        """调用 LLM (流式)"""
+        """
+        调用 LLM (流式)，支持工具调用。
+
+        工具调用策略 (混合模式):
+            llama.cpp 的流式端点不支持 function calling —— 工具调用只在
+            非流式 /chat/completions 中生效。因此本方法采用「先探工具、再流式」策略:
+                1. 先用非流式调用 (带 tools schema) 检测模型是否要调工具
+                2. 如果有 tool_calls，执行工具 → 回填 → 循环，进度以文本帧 yield
+                3. 模型不再要求调工具后，用流式端点产出最终回复
+
+        如果角色没有工具授权 (tool_names 为空)，直接走纯流式（与旧行为一致，
+        零开销）。
+        """
         from core.llm.gateway import llm_gateway
 
         messages = self.context_to_messages(ctx)
         base_url = self._get_gpu_url()
 
+        # 兜底：确保内置工具已注册
+        if not tool_registry.list_all():
+            import core.tools.builtin  # noqa: F401
+
+        # 该角色是否有工具授权 —— 无授权则纯流式，零开销
+        agent_config = {"tools": {name: True for name in self.tool_names}}
+        tool_defs = tool_registry.get_tool_definitions(agent_config)
+        tools_arg = tool_defs if tool_defs else None
+
+        if not tools_arg:
+            # 无工具 → 纯流式 (与旧行为完全一致)
+            async for token in llm_gateway.chat_stream(
+                messages,
+                temperature=0.7,
+                max_tokens=4096,
+                base_url=base_url,
+            ):
+                yield token
+            return
+
+        # 工具循环: 先用非流式调用来检测/执行工具调用
+        last_content = ""
+        for iteration in range(MAX_TOOL_ITERATIONS):
+            try:
+                result = await llm_gateway.chat(
+                    messages,
+                    temperature=0.7,
+                    max_tokens=4096,
+                    tools=tools_arg,
+                    base_url=base_url,
+                )
+            except Exception as e:
+                print(f"[Role:{self.id}] ⚠ 流式工具循环内 LLM 异常: {e}")
+                yield last_content or f"[推理失败: {e}]"
+                return
+
+            content = result.get("content") or ""
+            last_content = content or last_content
+            tool_calls = result.get("tool_calls") or []
+
+            if not tool_calls:
+                # 模型不再要求调工具 → 用流式产出最终回复
+                break
+
+            # 通知前端正在执行工具
+            tool_names = [tc.get("function", {}).get("name", "?") for tc in tool_calls]
+            yield f"\n[🔧 调用工具: {', '.join(tool_names)}] "
+
+            # 回写 assistant 消息 (含 tool_calls)
+            messages.append({
+                "role": "assistant",
+                "content": content,
+                "tool_calls": [
+                    {
+                        "id": tc.get("id", ""),
+                        "type": "function",
+                        "function": {
+                            "name": tc.get("function", {}).get("name", ""),
+                            "arguments": tc.get("function", {}).get("arguments", "{}"),
+                        },
+                    }
+                    for tc in tool_calls
+                ],
+            })
+
+            # 逐个执行工具
+            for tc in tool_calls:
+                fn = tc.get("function", {})
+                name = fn.get("name", "")
+                raw_args = fn.get("arguments", "{}") or "{}"
+
+                try:
+                    args = json.loads(raw_args) if isinstance(raw_args, str) else (raw_args or {})
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    args = {}
+                    print(f"[Role:{self.id}] ⚠ 流式工具参数解析失败: {name}")
+
+                try:
+                    tool_result = await tool_registry.execute_tool(name, args, agent_config)
+                except Exception as e:
+                    tool_result = {"success": False, "error": f"工具执行异常: {e}"}
+
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.get("id", ""),
+                    "content": json.dumps(tool_result, ensure_ascii=False, default=str),
+                })
+
+                # 工具执行状态反馈
+                ok = "✓" if tool_result.get("success") else "✗"
+                yield f"\n[{ok} {name}] "
+
+        # 流式产出最终回复
         async for token in llm_gateway.chat_stream(
             messages,
             temperature=0.7,

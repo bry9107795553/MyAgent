@@ -551,44 +551,87 @@ class MasterRole(RoleBase):
                 current_step_idx += 1
                 continue
 
-            # 获取角色实例
-            role = self._loaded_roles.get(role_id)
-            if not role:
-                print(f"[Master] 工作组 {wg_id} 步骤 {step_num}: "
-                      f"角色 {role_id} 未注册，跳过")
-                execution_log.append(
-                    f"⚠ 步骤 {step_num}: 角色 {role_id} 未注册，跳过"
+            # 获取主角色实例 + 并行角色实例
+            parallel_role_ids = step_def.get("parallel_with", [])
+            if isinstance(parallel_role_ids, str):
+                parallel_role_ids = [parallel_role_ids]
+
+            all_role_ids = [role_id] + [r for r in parallel_role_ids if r and r != role_id]
+
+            # 收集所有需要执行的角色
+            roles_to_run: list[tuple[str, object, str]] = []
+            for rid in all_role_ids:
+                r = self._loaded_roles.get(rid)
+                if not r:
+                    print(f"[Master] 工作组 {wg_id} 步骤 {step_num}: "
+                          f"角色 {rid} 未注册，跳过")
+                    execution_log.append(f"⚠ 步骤 {step_num}: 角色 {rid} 未注册，跳过")
+                    continue
+                task = self._build_pipeline_task(
+                    user_message=user_message,
+                    step_def={"role": rid, "action": action if rid == role_id else f"并行辅助: {action}",
+                              "input_from": step_def.get("input_from", "user"),
+                              "output_to": step_def.get("output_to", ""),
+                              "parallel_with": [], "condition": ""},
+                    previous_results=step_results,
+                    wg_name=wg_name,
                 )
+                roles_to_run.append((rid, r, task))
+
+            if not roles_to_run:
                 current_step_idx += 1
                 continue
 
-            print(f"[Master] 工作组 {wg_id} → 步骤 {step_num}: {role_id} ({action[:30]}...)")
+            # 并行或串行执行
+            if len(roles_to_run) > 1:
+                print(f"[Master] 工作组 {wg_id} → 步骤 {step_num}: "
+                      f"{len(roles_to_run)} 个角色并行执行")
 
-            # 构建任务包
-            task = self._build_pipeline_task(
-                user_message=user_message,
-                step_def=step_def,
-                previous_results=step_results,
-                wg_name=wg_name,
-            )
+                async def _run_one(rid: str, r: object, t: str) -> tuple[str, str]:
+                    tid = generate_id("task")
+                    try:
+                        res = await asyncio.wait_for(
+                            r.execute(t, tid, extra_context=f"工作组: {wg_name}\n步骤: {step_num}"),
+                            timeout=timeout,
+                        )
+                        return (rid, res)
+                    except asyncio.TimeoutError:
+                        return (rid, f"[⚠ {r.name} 超时 ({timeout}s)]")
+                    except Exception as e:
+                        return (rid, f"[⚠ {r.name} 执行失败: {e}]")
 
-            # 带超时/重试执行
-            task_id = generate_id("task")
-            result = await self._execute_with_retry(
-                role=role,
-                task=task,
-                task_id=task_id,
-                extra_context=f"工作组: {wg_name}\n流水线步骤: {step_num}/{len(sorted_pipeline)}",
-                timeout=timeout,
-                max_retries=1,
-            )
+                parallel_results = await asyncio.gather(
+                    *[_run_one(rid, r, t) for rid, r, t in roles_to_run],
+                    return_exceptions=True,
+                )
 
-            step_results[step_key] = result
-
-            if result.startswith("[⚠"):
-                execution_log.append(f"✗ 步骤 {step_num}: {role_id} 失败")
+                for pr in parallel_results:
+                    if isinstance(pr, tuple):
+                        rid, res = pr
+                        # 主角色存标准 key，并行角色存带后缀的 key
+                        if rid == role_id:
+                            step_results[step_key] = res
+                        else:
+                            step_results[f"step_{step_num}_{rid}"] = res
+                        ok = "✗" if res.startswith("[⚠") else "✓"
+                        execution_log.append(f"{ok} 步骤 {step_num}: {rid} 完成")
+                    else:
+                        print(f"[Master] 并行执行异常: {pr}")
             else:
-                execution_log.append(f"✓ 步骤 {step_num}: {role_id} 完成")
+                # 单角色串行执行
+                rid, r, task = roles_to_run[0]
+                task_id = generate_id("task")
+                result = await self._execute_with_retry(
+                    role=r,
+                    task=task,
+                    task_id=task_id,
+                    extra_context=f"工作组: {wg_name}\n流水线步骤: {step_num}/{len(sorted_pipeline)}",
+                    timeout=timeout,
+                    max_retries=1,
+                )
+                step_results[step_key] = result
+                ok = "✗" if result.startswith("[⚠") else "✓"
+                execution_log.append(f"{ok} 步骤 {step_num}: {rid} 完成")
 
             # 检查是否需要返工
             condition = step_def.get("condition", "")
@@ -819,7 +862,7 @@ class MasterRole(RoleBase):
         """
         判断是否需要返工
 
-        :param condition: 步骤的 condition 描述
+        :param condition: 步骤的 condition 描述 (如 "inspection_failed", "test_not_passed")
         :param step_results: 所有步骤结果
         :param revision_counts: 返工计数
         :param max_revisions: 最大返工次数
@@ -828,9 +871,20 @@ class MasterRole(RoleBase):
         if not condition:
             return False
 
-        # 简单规则: 如果 condition 明确提到"不通过则返回"且当前步骤结果含失败标记
-        # 更复杂的判断由 LLM 在角色执行时完成
-        return False  # 默认不自动返工，由角色自行判断并请求返工
+        # 从最近的步骤结果中检查失败标记
+        failure_markers = [
+            "不通过", "失败", "需要返工", "打回", "rejected",
+            "[⚠", "未通过", "有错误", "存在问题",
+        ]
+        for key, result in step_results.items():
+            if any(marker in result for marker in failure_markers):
+                # 检查是否已达返工上限
+                for rk, count in revision_counts.items():
+                    if count >= max_revisions:
+                        return False
+                return True
+
+        return False
 
     def _find_prev_step_by_output(
         self,
