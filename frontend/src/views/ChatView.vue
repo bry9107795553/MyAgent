@@ -489,14 +489,14 @@ onMounted(()=>{
 
 <style scoped>
 /* ==========================================
-   设计系统 — 现代深色 + 紫蓝主调
+   设计系统 — 浅色系 + 紫蓝主调
    ========================================== */
 .agent-platform {
   display: grid;
   grid-template-columns: 280px 1fr 360px;
   height: 100vh;
-  background: #0a0a14;
-  color: #e8e8f0;
+  background: #f0f2f5;
+  color: #1a1a2e;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   font-feature-settings: "cv11", "ss01";
   overflow: hidden;
@@ -505,8 +505,8 @@ onMounted(()=>{
 /* 滚动条 */
 .agent-platform ::-webkit-scrollbar { width: 6px; height: 6px; }
 .agent-platform ::-webkit-scrollbar-track { background: transparent; }
-.agent-platform ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
-.agent-platform ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+.agent-platform ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+.agent-platform ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
 
 /* ==========================================
    左栏
@@ -631,7 +631,7 @@ onMounted(()=>{
    ========================================== */
 .chat-col {
   display: flex; flex-direction: column; min-width: 0;
-  background: #0a0a14;
+  background: #f8f9fb;
   position: relative;
 }
 
@@ -759,30 +759,33 @@ onMounted(()=>{
 .bubble p:last-child { margin-bottom: 0; }
 .bubble code {
   font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px;
-  background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px;
-  white-space: pre-wrap; word-break: break-all;
+  background: #f1f3f5; color: #d6336c; padding: 1px 6px; border-radius: 4px;
+  border: 1px solid #e9ecef; white-space: pre-wrap; word-break: break-all;
 }
 .bubble pre {
-  background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 8px; padding: 12px; overflow-x: auto; margin: 8px 0;
+  background: #f8f9fa; color: #1f2937;
+  border: 1px solid #e5e7eb; border-radius: 8px;
+  padding: 12px 14px; overflow-x: auto; margin: 8px 0;
+  font-size: 12.5px; line-height: 1.6;
 }
-.bubble pre code { background: none; padding: 0; }
+.bubble pre code { background: none; padding: 0; border: none; color: #1f2937; }
 .bubble table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
-.bubble table th, .bubble table td { border: 1px solid rgba(255,255,255,0.1); padding: 6px 10px; }
-.bubble table th { background: rgba(255,255,255,0.05); font-weight: 600; }
+.bubble table th, .bubble table td { border: 1px solid #e5e7eb; padding: 6px 10px; }
+.bubble table th { background: #f3f4f6; font-weight: 600; color: #111827; }
 .bubble ul, .bubble ol { padding-left: 20px; margin: 8px 0; }
 .bubble li { margin: 4px 0; }
 .bubble h1, .bubble h2, .bubble h3 { margin: 12px 0 8px; font-weight: 600; }
 .bubble h1 { font-size: 18px; } .bubble h2 { font-size: 16px; } .bubble h3 { font-size: 14px; }
 
 .msg.user .bubble {
-  background: linear-gradient(135deg, #6c5ce7, #5a4dcf);
+  background: linear-gradient(135deg, #4f46e5, #6366f1);
   color: #fff; border-bottom-right-radius: 4px;
 }
 .msg.assistant .bubble {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.06);
-  color: #e8e8f0; border-bottom-left-radius: 4px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  color: #1f2937; border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
 }
 .bubble.streaming { min-height: 44px; }
 
