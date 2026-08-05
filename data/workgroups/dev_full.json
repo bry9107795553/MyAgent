@@ -2,9 +2,43 @@
   "id": "dev_full",
   "name": "完整开发工作组",
   "description": "覆盖从需求发现到部署上线的完整开发流程，包含设计、编码、巡检、测试、部署和清理全链路",
-  "trigger_keywords": ["开发", "做项目", "写应用", "建网站", "做一个", "实现一个", "开发一个"],
-  "trigger_examples": ["开发一个待办事项应用", "做一个电商网站", "写一个API服务", "实现一个博客系统"],
-  "members": ["coach", "designer", "developer", "inspector", "tester", "deployer", "cleaner", "experience_evaluator"],
+  "trigger_keywords": [
+    "开发",
+    "做项目",
+    "写应用",
+    "建网站",
+    "做一个",
+    "实现一个",
+    "开发一个",
+    "写一个",
+    "建一个",
+    "创建",
+    "搭建",
+    "帮我写",
+    "帮我做",
+    "帮我建",
+    "帮我开发",
+    "网页",
+    "网站",
+    "前端页面",
+    "静态页面"
+  ],
+  "trigger_examples": [
+    "开发一个待办事项应用",
+    "做一个电商网站",
+    "写一个API服务",
+    "实现一个博客系统"
+  ],
+  "members": [
+    "coach",
+    "designer",
+    "developer",
+    "inspector",
+    "tester",
+    "deployer",
+    "cleaner",
+    "experience_evaluator"
+  ],
   "pipeline": [
     {
       "step": 1,
@@ -90,7 +124,10 @@
   ],
   "conditions": {
     "max_revisions": 3,
-    "user_confirmation_points": ["设计师输出多页面样图后确认设计方案", "部署前可选确认"],
+    "user_confirmation_points": [
+      "设计师输出多页面样图后确认设计方案",
+      "部署前可选确认"
+    ],
     "exit_criteria": "所有模块通过巡检与测试，部署成功且临时文件已清理"
   },
   "gpu_plan": {
