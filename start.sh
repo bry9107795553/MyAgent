@@ -221,9 +221,14 @@ echo ""
 # ===== 外部访问（可选，非致命）=====
 # Radeon Cloud 实例默认只开放 Jupyter(8888)，需用平台穿透工具 rc-tunnel 暴露 80。
 # 检测 rc-tunnel 是否存在，存在则自动暴露并打印公网 URL；不存在则跳过并提示。
+RC_TUNNEL_LOG=/tmp/rc-tunnel.log
 if command -v rc-tunnel >/dev/null 2>&1; then
     echo -e "${BLUE}→ 正在通过 rc-tunnel 暴露前端 (端口 80)...${NC}"
-    rc_tunnel_url=$(rc-tunnel expose --port 80 2>/dev/null | grep -oE 'https?://[^ ]+' | head -1 || true)
+    # 注意：rc-tunnel expose 是持久化前台阻塞命令（隧道常驻），不能用 $(...) 捕获，
+    # 否则脚本会永远等它退出而卡死。改为后台启动 + 读日志取 URL。
+    nohup rc-tunnel expose --port 80 >"$RC_TUNNEL_LOG" 2>&1 &
+    sleep 6
+    rc_tunnel_url=$(grep -oE 'https?://[^ ]+' "$RC_TUNNEL_LOG" | head -1 || true)
     if [ -n "$rc_tunnel_url" ]; then
         echo -e "  ${GREEN}✓${NC} 外部访问地址: $rc_tunnel_url"
         echo -e "  ${YELLOW}⚠${NC} 隧道空闲 60s 会回收，演示前请重新运行: rc-tunnel expose --port 80"
@@ -235,7 +240,9 @@ elif [ -f /var/run/secrets/frp-self-service/install ]; then
     /var/run/secrets/frp-self-service/install >/dev/null 2>&1 || true
     if [ -x /root/.local/bin/rc-tunnel ]; then
         export PATH="$HOME/.local/bin:$PATH"
-        rc_tunnel_url=$(rc-tunnel expose --port 80 2>/dev/null | grep -oE 'https?://[^ ]+' | head -1 || true)
+        nohup rc-tunnel expose --port 80 >"$RC_TUNNEL_LOG" 2>&1 &
+        sleep 6
+        rc_tunnel_url=$(grep -oE 'https?://[^ ]+' "$RC_TUNNEL_LOG" | head -1 || true)
         [ -n "$rc_tunnel_url" ] && echo -e "  ${GREEN}✓${NC} 外部访问地址: $rc_tunnel_url"
     fi
 else
