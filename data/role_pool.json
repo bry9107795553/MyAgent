@@ -48,9 +48,11 @@
         "source_verification"
       ],
       "tools": [
-        "web_search"
+        "web_search",
+        "file_read",
+        "file_write"
       ],
-      "description": "RAG+联网搜索，资料收集/多源搜索/文档解析"
+      "description": "RAG+知识库搜索，资料收集/多源搜索/文档解析，可生成新工具代码"
     },
     {
       "id": "writer",

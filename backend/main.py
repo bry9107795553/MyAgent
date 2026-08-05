@@ -21,7 +21,7 @@ from core.agent.registry import agent_registry
 from core.role.loader import role_loader
 from core.bus import message_bus
 
-from api.routes import agent_routes, skin_routes, module_routes, layout_routes, workgroup_routes, project_routes, system_routes
+from api.routes import agent_routes, skin_routes, module_routes, layout_routes, workgroup_routes, project_routes, system_routes, tool_routes
 
 
 @asynccontextmanager
@@ -105,6 +105,7 @@ app.include_router(layout_routes.router)
 app.include_router(workgroup_routes.router)
 app.include_router(project_routes.router)
 app.include_router(system_routes.router)
+app.include_router(tool_routes.router)
 
 
 # 健康检查
