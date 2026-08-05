@@ -513,10 +513,10 @@ onMounted(async () => {
 
   // 如果完全空，自动创建默认工作台
   if (store.modules.length === 0 && store.availableModules.length === 0 && store.templates.length > 0) {
-    // 从模板中选几个默认的自动加到工作台
-    const defaults = ['note', 'kanban', 'calendar']
-    for (const id of defaults) {
-      const tpl = store.templates.find(t => t.id === id)
+    // 从模板中选几个默认的自动加到工作台 (注意：后端返回的字段是 template 不是 id)
+    const defaultTemplateIds = ['note', 'kanban', 'calendar']
+    for (const tid of defaultTemplateIds) {
+      const tpl = store.templates.find(t => (t.template || t.id) === tid)
       if (tpl) {
         try {
           const res = await fetch('/api/modules', {
@@ -525,14 +525,15 @@ onMounted(async () => {
             body: JSON.stringify({
               name: tpl.name,
               description: tpl.description || '',
-              template: tpl.id,
-              config: tpl.default_config || {},
+              template: tpl.template || tpl.id,
+              config: {},
             }),
           })
           if (res.ok) {
             const data = await res.json()
-            store.availableModules.push(data.module || data)
-            store.addModule({ ...(data.module || data), x: store.modules.length * 3, y: 0, w: 6, h: 8 })
+            const newMod = data.module || data
+            store.availableModules.push(newMod)
+            store.addModule({ ...newMod, x: store.modules.length * 6, y: 0, w: 6, h: 8 })
           }
         } catch (e) {
           // 静默失败，不阻塞工作台加载

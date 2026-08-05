@@ -38,6 +38,31 @@ async def list_modules():
     return {"modules": module_generator.list_modules()}
 
 
+@router.post("")
+async def create_module(req: dict):
+    """
+    直接从模板创建模块 (不走 LLM 生成)，用于工作台一键添加默认模块
+    :param req: {name, description, template, config, x?, y?, w?, h?}
+    """
+    template = req.get("template")
+    if not template:
+        raise HTTPException(status_code=400, detail="缺少 template 字段")
+    # 从模板生成基础配置
+    from core.module_engine.templates import get_template
+    tpl = get_template(template)
+    if not tpl:
+        raise HTTPException(status_code=404, detail=f"模板不存在: {template}")
+
+    module = module_generator.create_from_template(
+        template_id=template,
+        name=req.get("name", tpl.get("name", template)),
+        description=req.get("description", tpl.get("description", "")),
+        config=req.get("config", {}),
+        position=req.get("position"),  # {x, y, w, h}
+    )
+    return {"module": module}
+
+
 @router.get("/templates")
 async def get_templates():
     """列出所有可用模板"""

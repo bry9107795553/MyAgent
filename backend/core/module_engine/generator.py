@@ -166,6 +166,54 @@ class ModuleGenerator:
                 continue
         return modules
 
+    def create_from_template(
+        self,
+        template_id: str,
+        name: str,
+        description: str,
+        config: dict,
+        position: dict = None,
+    ) -> dict:
+        """
+        从模板直接创建模块 (不走 LLM)
+        用于工作台一键添加默认模块的场景
+        """
+        from core.module_engine.templates import get_template
+        tpl = get_template(template_id)
+        if not tpl:
+            return {"error": f"模板不存在: {template_id}"}
+
+        module_id = generate_id("mod")
+        now = now_iso()
+        pos = position or {}
+
+        module = {
+            "module_id": module_id,
+            "name": name or tpl.get("name", template_id),
+            "description": description or tpl.get("description", ""),
+            "template": template_id,
+            "category": tpl.get("category", "其他"),
+            "icon": tpl.get("icon", "note"),
+            "config": config or {},
+            "layout": {
+                "x": pos.get("x", 0),
+                "y": pos.get("y", 0),
+                "w": pos.get("w", tpl.get("default_size", {}).get("w", 6)),
+                "h": pos.get("h", tpl.get("default_size", {}).get("h", 8)),
+            },
+            "default_size": tpl.get("default_size", {"w": 6, "h": 8}),
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        # 持久化
+        save_path = self.modules_dir / f"{module_id}.json"
+        self.modules_dir.mkdir(parents=True, exist_ok=True)
+        with open(save_path, "w", encoding="utf-8") as f:
+            json.dump(module, f, ensure_ascii=False, indent=2)
+
+        return module
+
     def get_module(self, module_id: str) -> Optional[dict]:
         """获取单个模块配置"""
         mod_path = self.modules_dir / f"{module_id}.json"
