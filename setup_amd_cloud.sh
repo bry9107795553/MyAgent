@@ -187,15 +187,15 @@ step "1/9" "检查系统依赖"
 if command -v rocminfo &> /dev/null; then
     # rocminfo 会先列出 CPU agent，直接取第一条会误报成 CPU 型号。
     # 先尝试 rocm-smi（只列 GPU），失败再回退 rocminfo 并过滤掉 CPU 关键词。
-    gpu_name=$(rocm-smi --showproductname --csv 2>/dev/null \
+    gpu_name=$(timeout 60 rocm-smi --showproductname --csv 2>/dev/null \
         | awk -F, 'NR>1 && $2 != "" {print $2; exit}' | xargs 2>/dev/null || true)
     if [ -z "$gpu_name" ]; then
-        gpu_name=$(rocminfo 2>/dev/null | grep 'Marketing Name' | cut -d: -f2- \
+        gpu_name=$(timeout 60 rocminfo 2>/dev/null | grep 'Marketing Name' | cut -d: -f2- \
             | grep -viE 'epyc|xeon|core processor|ryzen|threadripper' \
             | head -1 | xargs 2>/dev/null || true)
     fi
     echo "  ✓ GPU: ${gpu_name:-unknown}"
-    gfx=$(rocminfo 2>/dev/null | grep -m1 -o 'gfx[0-9a-z]*' || true)
+    gfx=$(timeout 60 rocminfo 2>/dev/null | grep -m1 -o 'gfx[0-9a-z]*' || true)
     echo "  ✓ 架构: ${gfx:-unknown}  (期望 gfx1100)"
     if [ -n "$gfx" ] && [ "$gfx" != "$AMDGPU_TARGET" ]; then
         warn "实际架构 $gfx 与 AMDGPU_TARGET=$AMDGPU_TARGET 不符。"
@@ -216,12 +216,12 @@ echo "  ✓ Python: $(python3 --version)"
 step "2/9" "GPU 显存检查"
 
 echo "=== GPU VRAM Check ==="
-amd-smi static --vram 2>/dev/null || rocm-smi --showmeminfo vram 2>/dev/null || echo "[WARN] Could not detect VRAM"
+timeout 60 amd-smi static --vram 2>/dev/null || timeout 60 rocm-smi --showmeminfo vram 2>/dev/null || echo "[WARN] Could not detect VRAM"
 echo "Expected: ~48GB for W7900. If significantly lower, abort and check allocation."
 echo ""
 
 # 尝试解析实际显存并给出判断
-vram_mib=$(rocm-smi --showmeminfo vram --csv 2>/dev/null \
+vram_mib=$(timeout 60 rocm-smi --showmeminfo vram --csv 2>/dev/null \
     | awk -F, 'NR>1 && $2 ~ /^[0-9]+$/ {print int($2/1048576); exit}')
 if [ -n "$vram_mib" ] && [ "$vram_mib" -gt 0 ]; then
     echo "  检测到显存: ${vram_mib} MiB (~$(( vram_mib / 1024 )) GiB)"
