@@ -7,13 +7,13 @@ import App from './App.vue'
 import ChatView from './views/ChatView.vue'
 import WorkbenchView from './views/WorkbenchView.vue'
 import SkinMarketView from './views/SkinMarketView.vue'
-import SystemView from './views/SystemView.vue'
+import BrowserView from './views/BrowserView.vue'
 
 const routes = [
   { path: '/', name: 'chat', component: ChatView },
+  { path: '/browse', name: 'browse', component: BrowserView },
   { path: '/workbench', name: 'workbench', component: WorkbenchView },
   { path: '/skins', name: 'skins', component: SkinMarketView },
-  { path: '/system', name: 'system', component: SystemView },
 ]
 
 const router = createRouter({

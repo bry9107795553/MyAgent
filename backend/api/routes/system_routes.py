@@ -1,13 +1,17 @@
 """
 System overview API — comprehensive system status for frontend dashboard.
 """
-from fastapi import APIRouter
+from pathlib import Path
+from fastapi import APIRouter, HTTPException, Query
 
 from core.role.loader import role_loader
 from core.llm.gateway import llm_gateway
 from config.settings import settings
 
 router = APIRouter(prefix="/api/system", tags=["system"])
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+SAFE_ROOTS = [PROJECT_ROOT, PROJECT_ROOT / "data" / "projects", PROJECT_ROOT / "data"]
 
 
 @router.get("")
@@ -63,3 +67,44 @@ async def system_overview():
         "workgroup_count": len(workgroups),
         "gpu": gpu_info,
     }
+
+
+# ---- 文件阅览 API ----
+READABLE_EXTS = {".md",".txt",".json",".yaml",".yml",".xml",".html",".css",
+                 ".js",".ts",".vue",".py",".sh",".csv",".toml",".cfg",".ini",
+                 ".env",".svg",".rst",".sql",".Dockerfile",""}
+
+@router.get("/read")
+async def read_file(path: str = Query("")):
+    """浏览项目文件：目录列表或文件内容"""
+    target = (PROJECT_ROOT / path).resolve()
+    # 安全检查
+    safe = any(str(target).startswith(str(r.resolve())) for r in SAFE_ROOTS)
+    if not safe:
+        raise HTTPException(status_code=403, detail="路径不允许")
+    if not target.exists():
+        return {"files": [], "error": "不存在"}
+
+    if target.is_dir():
+        files = []
+        for child in sorted(target.iterdir()):
+            if child.name.startswith('.') and child.name not in ['.gitignore','.env']:
+                continue
+            try:
+                st = child.stat()
+                files.append({"name": child.name, "is_dir": child.is_dir(),
+                              "size": st.st_size if child.is_file() else 0})
+            except:
+                pass
+        return {"files": files}
+    else:
+        ext = target.suffix.lower()
+        if ext not in READABLE_EXTS and target.stat().st_size < 1024*1024:
+            pass  # try anyway if small
+        elif target.stat().st_size > 2*1024*1024:
+            return {"content": f"[{target.stat().st_size/1024/1024:.1f}MB — 文件太大，无法预览]", "error": "too_large"}
+        try:
+            content = target.read_text(encoding='utf-8', errors='replace')
+            return {"content": content}
+        except:
+            return {"content": "[不可读取的二进制文件]", "error": "binary"}
