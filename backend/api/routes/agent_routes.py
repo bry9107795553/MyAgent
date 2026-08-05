@@ -63,6 +63,10 @@ async def create_agent(req: CreateAgentRequest):
             template=req.template,
             system_prompt=req.system_prompt,
         )
+        # 显式注册：watchdog 的目录事件早于 config.yaml 落盘，
+        # 且容器环境常禁用 inotify，只依赖热加载会让新 Agent 立即对话时 WS 403
+        if not agent_registry.get(req.agent_id):
+            await agent_registry.register(req.agent_id)
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -71,7 +75,7 @@ async def create_agent(req: CreateAgentRequest):
 @router.post("/generate")
 async def generate_agent(req: AgentGenerateRequest):
     """AI 生成 Agent — 用自然语言描述自动创建 Agent 配置"""
-    if not llm_gateway.available:
+    if not await llm_gateway.ensure_available():
         raise HTTPException(status_code=503, detail="LLM 推理引擎未就绪，请检查 llama-server 是否已启动")
 
     result = await agent_generator.generate(req)
@@ -85,6 +89,8 @@ async def generate_agent(req: AgentGenerateRequest):
 async def delete_agent(agent_id: str):
     """删除 Agent"""
     try:
+        # 先注销再删目录：注销会 save_memory()，目录删掉后写盘会失败
+        await agent_registry.unregister(agent_id)
         result = agent_lifecycle.delete_agent(agent_id)
         return result
     except ValueError as e:
@@ -98,7 +104,7 @@ async def chat(agent_id: str, req: ChatRequest):
     if not agent:
         raise HTTPException(status_code=404, detail=f"Agent 不存在: {agent_id}")
 
-    if not llm_gateway.available:
+    if not await llm_gateway.ensure_available():
         raise HTTPException(status_code=503, detail="LLM 推理引擎未就绪，请检查 llama-server 是否已启动")
 
     result = await agent.chat(req.message)
@@ -137,19 +143,13 @@ async def agent_websocket(websocket: WebSocket, agent_id: str):
             user_message = data.get("message", "")
 
             # 流式推理 → 通过消息总线推送
+            # 调度元数据 (type, workgroup, roles_used) 在 stream_end 之前下发，
+            # 否则客户端已在 stream_end 时关闭连接，元数据会丢失
             await message_bus.stream_to_agent(
                 agent_id,
                 agent.chat_stream(user_message),
+                meta_provider=lambda: agent.last_dispatch_info,
             )
-
-            # 流式结束后推送调度元数据 (type, workgroup, roles_used)
-            dispatch_info = agent.last_dispatch_info
-            await message_bus.send_to_agent(agent_id, {
-                "type": "stream_meta",
-                "dispatch_type": dispatch_info.get("type", "direct"),
-                "workgroup": dispatch_info.get("workgroup"),
-                "roles_used": dispatch_info.get("roles_used", []),
-            })
 
             # 保存记忆
             agent.save_memory()

@@ -1,0 +1,148 @@
+# ============================================================================
+# MyAgent —— 本地 Docker 模拟环境（无 GPU 也能原样跑通）
+#
+#   docker compose up --build          启动
+#   浏览器打开 http://localhost         前端
+#   docker compose down                停止
+#
+# 服务拓扑：
+#   frontend  :80    Nginx 静态托管 + 反代 /api → backend:8080
+#   backend   :8080  FastAPI，经 http://localhost:8000/v1 调推理
+#   mock-llm  :8000  假推理端点（纯标准库，模拟 llama.cpp 的 OpenAI 兼容接口）
+#
+# ────────────────────────────────────────────────────────────────────────────
+# ⚠ 关键设计：为什么 mock-llm 用 network_mode: "service:backend"
+#
+# backend/config/settings.py 的 assert_local_endpoint() 是赛道合规的代码级
+# 执行点 —— 推理端点主机名不在 {localhost,127.0.0.1,::1} 内就直接抛
+# RemoteInferenceForbidden，服务起不来。所以后端**不能**用 compose 服务名
+# http://mock-llm:8000/v1 去连推理。
+#
+# 解决办法是让推理容器加入 backend 的网络命名空间，两者共享同一个 localhost。
+# 这恰好与 AMD 云实例上的真实拓扑一致：llama-server 与后端同机，都走 localhost。
+# 换成真 GPU 时，只需把 mock-llm 换成 ROCm llama.cpp（见文件末尾注释块），
+# network_mode 一行照抄即可，后端代码零改动。
+# ────────────────────────────────────────────────────────────────────────────
+#
+# 启动顺序说明：mock-llm 依赖 backend 的网络命名空间，所以 backend 必然先起，
+# 此时推理端点尚未监听。后端已支持「推理端点后到自动恢复」
+# （LLMGateway.ensure_available 惰性重探），因此这个顺序是安全的 ——
+# 真实部署里 llama-server 加载 14B GGUF 要几十秒，同样依赖这个能力。
+# ============================================================================
+
+services:
+  # -------------------------------------------------------------------------
+  # 后端 —— 同时承载 backend + 推理服务的网络命名空间
+  # -------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: myagent-backend:local
+    container_name: myagent-backend
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      # 只能是 localhost —— 推理容器就跑在本命名空间的 8000 端口上
+      LLAMA_BASE_URL: "http://localhost:8000/v1"
+      LLAMA_MODEL: "Qwen2.5-14B-Instruct"
+      LLAMA_API_KEY: "EMPTY"
+      SINGLE_GPU_MODE: "true"
+      DEBUG: "false"
+    ports:
+      - "8080:8080"   # 后端 API（调试用；正常访问走 frontend:80）
+      - "8000:8000"   # 推理端点（mock-llm 在本命名空间监听，仅调试用）
+    volumes:
+      # Agent 配置、记忆、角色池、工具产物持久化到宿主机，
+      # 容器重建不丢对话历史
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/api/health',timeout=4).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 6
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # 假推理端点 —— 真实部署时整段替换为 ROCm llama.cpp（见文件末尾）
+  # -------------------------------------------------------------------------
+  mock-llm:
+    image: python:3.11-slim
+    container_name: myagent-mock-llm
+    # 共享 backend 的网络栈，使后端的 localhost:8000 命中本服务
+    network_mode: "service:backend"
+    depends_on:
+      - backend
+    volumes:
+      - ./mock_llm.py:/app/mock_llm.py:ro
+    working_dir: /app
+    # mock_llm.py 只用 Python 标准库，无需 pip install
+    command: ["python", "-u", "mock_llm.py"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=4).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 6
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------------
+  # 前端 —— Vite 构建产物 + Nginx，反代 /api 与 WebSocket 到后端
+  # -------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: myagent-frontend:local
+    container_name: myagent-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 5
+    restart: unless-stopped
+
+# ============================================================================
+# 真实部署（AMD Radeon 云实例）替换方式
+#
+# 把上面的 mock-llm 服务整段换成真实推理容器，其余服务原样不动：
+#
+#   llama-cpp:
+#     image: rocm/llama.cpp:latest         # 或自行基于 ROCm 基础镜像构建
+#     container_name: myagent-llama
+#     network_mode: "service:backend"      # ← 这一行照抄，保证 localhost 可达
+#     depends_on:
+#       - backend
+#     devices:
+#       - /dev/kfd                         # ROCm 计算设备
+#       - /dev/dri                         # GPU 渲染设备
+#     group_add:
+#       - video
+#     security_opt:
+#       - seccomp:unconfined
+#     ipc: host
+#     volumes:
+#       - ./models:/models:ro              # 放 Qwen2.5-14B-Instruct 的 GGUF
+#     command: >
+#       llama-server
+#       --model /models/Qwen2.5-14B-Instruct-Q4_K_M.gguf
+#       --alias Qwen2.5-14B-Instruct
+#       --host 0.0.0.0 --port 8000
+#       --n-gpu-layers 999
+#       --ctx-size 8192
+#       --jinja                            # 开启工具调用（function calling）模板
+#
+# 注意：
+#   1. --alias 必须等于后端 LLAMA_MODEL（Qwen2.5-14B-Instruct），否则请求会 404。
+#   2. 必须带 --jinja（或对应 chat template），否则 tool_calls 不会返回，
+#      角色系统的工具闭环会退化成纯文本回复。
+#   3. 裸机部署请继续用仓库自带的 setup_amd_cloud.sh / start.sh，
+#      本 compose 只是无 GPU 环境下的等价模拟，不替代它们。
+# ============================================================================

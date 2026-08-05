@@ -44,9 +44,8 @@ async def lifespan(app: FastAPI):
     print("\n[3/4] 初始化角色系统...")
     try:
         master = role_loader.load_all()
-        # 将主控绑定到已注册的 Agent
-        for agent_id, agent in agent_registry._agents.items():
-            agent.bind_master(master)
+        # 注入主控 — 绑定已注册 Agent，并让运行期新建的 Agent 自动继承
+        agent_registry.set_master(master)
         print(f"  ✓ 角色系统就绪: {role_loader.role_count} 个角色")
         print(f"  ✓ 主控已绑定到 {len(agent_registry._agents)} 个 Agent")
     except Exception as e:
@@ -107,9 +106,10 @@ app.include_router(project_routes.router)
 # 健康检查
 @app.get("/api/health")
 async def health():
+    # 惰性重探：llama-server 可能晚于后端就绪，不能只认启动时的一次探测
     return {
         "status": "ok",
-        "llm_available": llm_gateway.available,
+        "llm_available": await llm_gateway.ensure_available(),
         "agents": agent_registry.list_agents(),
     }
 

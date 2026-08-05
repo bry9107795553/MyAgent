@@ -22,14 +22,14 @@ class AgentEventHandler(FileSystemEventHandler):
 
     def on_created(self, event):
         if event.is_directory:
-            dir_name = Path(event.src_path).name
-            # 检查是否是有效的 Agent 目录 (含 config.yaml)
-            if (Path(event.src_path) / "config.yaml").exists():
-                print(f"[Watchdog] 检测到新 Agent 目录: {dir_name}")
-                asyncio.run_coroutine_threadsafe(
-                    self.registry.register(dir_name),
-                    self.registry._loop,
-                )
+            src = Path(event.src_path)
+            # 目录创建事件先于 config.yaml 写入到达，此处不能立刻判存在性，
+            # 否则新建的 Agent 会被静默跳过、必须重启服务才可用。
+            print(f"[Watchdog] 检测到新目录: {src.name}，等待 config.yaml 就绪")
+            asyncio.run_coroutine_threadsafe(
+                self.registry.register_when_ready(src.name),
+                self.registry._loop,
+            )
 
     def on_deleted(self, event):
         if event.is_directory:
@@ -48,6 +48,7 @@ class AgentRegistry:
         self._agents: Dict[str, BaseAgent] = {}
         self._observer: Optional[Observer] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._master = None  # Optional[MasterRole]，由角色系统初始化后注入
 
     async def init(self, loop: asyncio.AbstractEventLoop):
         """初始化注册表：扫描现有 Agent + 启动目录监听"""
@@ -78,12 +79,28 @@ class AgentRegistry:
             print(f"[Registry]   Agent 变更需重启服务生效")
             self._observer = None
 
+    async def register_when_ready(self, agent_id: str, timeout: float = 5.0):
+        """等待 config.yaml 落盘后再注册 (最长 timeout 秒)，用于 watchdog 目录创建事件"""
+        config_path = Path(settings.agents_dir) / agent_id / "config.yaml"
+        waited = 0.0
+        while waited < timeout:
+            if config_path.exists():
+                if agent_id not in self._agents:
+                    await self.register(agent_id)
+                return
+            await asyncio.sleep(0.2)
+            waited += 0.2
+        print(f"[Registry] ⚠ {agent_id} 在 {timeout}s 内未出现 config.yaml，跳过注册")
+
     async def register(self, agent_id: str):
         """注册一个 Agent (从目录加载配置)"""
         try:
             agent = BaseAgent(agent_id)
             agent.load()
             agent.load_memory()
+            # 运行期新建的 Agent 也要绑定主控，否则会退回无角色调度的过渡模式
+            if self._master is not None:
+                agent.bind_master(self._master)
             self._agents[agent_id] = agent
             print(f"[Registry] ✓ Agent 已注册: {agent_id} ({agent.name})")
         except Exception as e:
@@ -95,6 +112,12 @@ class AgentRegistry:
             agent = self._agents.pop(agent_id)
             agent.save_memory()
             print(f"[Registry] ✗ Agent 已注销: {agent_id} ({agent.name})")
+
+    def set_master(self, master):
+        """注入主控角色 — 绑定到现有 Agent，并作为后续新注册 Agent 的默认主控"""
+        self._master = master
+        for agent in self._agents.values():
+            agent.bind_master(master)
 
     def get(self, agent_id: str) -> Optional[BaseAgent]:
         """获取 Agent 实例"""

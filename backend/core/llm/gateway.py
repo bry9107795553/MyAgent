@@ -21,6 +21,7 @@ from typing import AsyncGenerator, Optional
 import json
 import httpx
 import asyncio
+import time
 
 from config.settings import settings, assert_local_endpoint
 
@@ -35,6 +36,8 @@ class LLMGateway:
         self._client: Optional[AsyncOpenAI] = None
         self._available: bool = False
         self._mode: str = "local"         # "local" | "none" —— 没有 "cloud"
+        self._last_probe: float = 0.0     # 上次惰性重探时间戳
+        self._probe_interval: float = 10.0
 
     def _new_local_client(self, base_url: str) -> AsyncOpenAI:
         """创建一个本机推理客户端。非本机地址会在这里被拦截。"""
@@ -92,6 +95,36 @@ class LLMGateway:
     @property
     def available(self) -> bool:
         return self._available
+
+    async def ensure_available(self) -> bool:
+        """
+        惰性重探本地推理端点。
+
+        llama-server 加载 14B GGUF 到显存可能需要几十秒甚至数分钟，
+        往往晚于后端启动完成。若只在 init() 里探测一次就固化为不可用，
+        后续 /api/health 会一直报 llm_available=false、/chat 一直 503，
+        必须重启后端才能恢复 —— 这在容器编排里是致命的启动顺序陷阱。
+        因此对外暴露一次带节流的重探（默认最快 10 秒一次）。
+        """
+        if self._available:
+            return True
+
+        now = time.monotonic()
+        if now - self._last_probe < self._probe_interval:
+            return False
+        self._last_probe = now
+
+        if self._client is None:
+            self._client = self._new_local_client(settings.llama_base_url)
+        try:
+            await self._client.models.list()
+            self._available = True
+            self._mode = "local"
+            print("[LLM Gateway] ✓ 本地 llama.cpp 重探成功，推理功能已恢复")
+            return True
+        except Exception as e:
+            print(f"[LLM Gateway] 重探失败，推理仍不可用: {e}")
+            return False
 
     @property
     def mode(self) -> str:

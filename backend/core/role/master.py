@@ -265,7 +265,11 @@ class MasterRole(RoleBase):
         流式调度 (向用户实时反馈调度进度)
 
         :yield: 进度 token
+
+        本轮实际使用的工作组与角色记录在 self.last_stream_dispatch，
+        供上层在 stream_meta 帧中回传前端。
         """
+        self._last_stream_dispatch = {"type": "direct", "workgroup": None, "roles_used": []}
         yield "[分析中...] "
 
         if self._is_simple_greeting(user_message):
@@ -278,6 +282,11 @@ class MasterRole(RoleBase):
         if matched_wg:
             wg_name = matched_wg.get("name", matched_wg.get("id"))
             pipeline = matched_wg.get("pipeline", [])
+            self._last_stream_dispatch = {
+                "type": "workgroup",
+                "workgroup": wg_name,
+                "roles_used": matched_wg.get("members", []),
+            }
             yield f"[匹配到工作组「{wg_name}」({len(pipeline)} 步流水线)] "
 
             result = await self._execute_pipeline(matched_wg, user_message)
@@ -287,6 +296,11 @@ class MasterRole(RoleBase):
         # 关键词匹配角色
         matched_roles = self._keyword_match_roles(user_message)
         if matched_roles:
+            self._last_stream_dispatch = {
+                "type": "roles",
+                "workgroup": None,
+                "roles_used": [r["id"] for r in matched_roles],
+            }
             yield f"[已匹配 {len(matched_roles)} 个角色: "
             yield ", ".join(r["name"] for r in matched_roles)
             yield "] "
@@ -299,6 +313,13 @@ class MasterRole(RoleBase):
         # 通用处理
         result = await self._handle_general(user_message)
         yield result
+
+    @property
+    def last_stream_dispatch(self) -> dict:
+        """最近一次流式调度使用的工作组 / 角色信息"""
+        return getattr(self, "_last_stream_dispatch", None) or {
+            "type": "direct", "workgroup": None, "roles_used": [],
+        }
 
     # ------------------------------------------------------------------ #
     # 意图分析
