@@ -50,15 +50,18 @@ async def run_test(name, message, min_len, timeout, keywords):
                 data = json.loads(raw)
                 msg_type = data.get("type", "")
                 
-                if msg_type == "chunk":
+                if msg_type == "stream_start":
+                    pass  # 流开始标记，忽略
+                
+                elif msg_type == "stream_token":
                     if first_token_at is None:
                         first_token_at = time.time() - start
                     content = data.get("content", "")
                     full_response += content
-                    if len(full_response) < 200:
+                    if len(full_response) < 300:
                         print(content, end="", flush=True)
                 
-                elif msg_type == "meta":
+                elif msg_type == "stream_meta":
                     dispatch_info = data
                     
                 elif msg_type == "stream_end":
@@ -67,6 +70,9 @@ async def run_test(name, message, min_len, timeout, keywords):
                 elif msg_type == "error":
                     print(f"\n  ❌ 错误: {data.get('message','')}")
                     return False
+                
+                else:
+                    print(f"\n  ⚠ 未知消息类型: {msg_type}")
 
             elapsed = time.time() - start
             ttft = first_token_at if first_token_at else elapsed
@@ -77,6 +83,7 @@ async def run_test(name, message, min_len, timeout, keywords):
             if dispatch_info:
                 wg = dispatch_info.get("workgroup", "")
                 roles = dispatch_info.get("roles_used", [])
+                dtype = dispatch_info.get("dispatch_type", "")
                 if wg:
                     print(f"  🔧 工作组: {wg}")
                 if roles:
