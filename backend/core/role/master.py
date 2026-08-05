@@ -262,12 +262,9 @@ class MasterRole(RoleBase):
 
     async def dispatch_stream(self, user_message: str) -> AsyncGenerator[str, None]:
         """
-        流式调度 (向用户实时反馈调度进度)
+        流式调度 (向用户实时反馈调度进度 + 逐 token 推送)
 
         :yield: 进度 token
-
-        本轮实际使用的工作组与角色记录在 self.last_stream_dispatch，
-        供上层在 stream_meta 帧中回传前端。
         """
         self._last_stream_dispatch = {"type": "direct", "workgroup": None, "roles_used": []}
         yield "[分析中...] "
@@ -288,7 +285,7 @@ class MasterRole(RoleBase):
                 "roles_used": matched_wg.get("members", []),
             }
             yield f"[匹配到工作组「{wg_name}」({len(pipeline)} 步流水线)] "
-
+            # 工作组是串行多步骤，每个步骤需完整输出 → 非流式
             result = await self._execute_pipeline(matched_wg, user_message)
             yield result
             return
@@ -304,15 +301,16 @@ class MasterRole(RoleBase):
             yield f"[已匹配 {len(matched_roles)} 个角色: "
             yield ", ".join(r["name"] for r in matched_roles)
             yield "] "
-
+            # 多角色也需要完整输出 → 非流式
             results = await self._dispatch_to_roles(user_message, matched_roles)
             content = self._aggregate_results(user_message, results)
             yield content
             return
 
-        # 通用处理
-        result = await self._handle_general(user_message)
-        yield result
+        # 通用处理 → 真正逐 token 流式
+        ctx = self._assemble_context(user_message, generate_id("task"), "")
+        async for token in self._call_llm_stream(ctx):
+            yield token
 
     @property
     def last_stream_dispatch(self) -> dict:
