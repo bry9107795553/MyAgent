@@ -425,7 +425,9 @@ onMounted(()=>{
 .pills{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:6px}
 .pill{padding:5px 14px;background:var(--bg-1);border:1px solid var(--border);border-radius:16px;font-size:12px;color:var(--text-1);cursor:pointer;transition:all .12s}
 .pill:hover{border-color:var(--accent);color:var(--accent)}
-.msg{margin-bottom:14px;max-width:78%;min-width:0;overflow:hidden}.msg.user{margin-left:auto}
+.msg{margin-bottom:14px;max-width:78%;min-width:0;display:flex;width:fit-content}
+.msg.user{margin-left:auto;flex-direction:row-reverse}
+.msg.assistant{align-items:flex-start}
 .bubble{padding:9px 14px;border-radius:10px;font-size:13px;line-height:1.6;max-width:100%;word-wrap:break-word;word-break:break-word;overflow-wrap:break-word;white-space:pre-wrap;overflow-x:auto}
 .bubble *{max-width:100%;word-wrap:break-word;overflow-wrap:break-word}
 .bubble table{display:block;max-width:100%;overflow-x:auto}
