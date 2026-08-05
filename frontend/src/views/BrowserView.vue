@@ -4,7 +4,6 @@
     <div class="browser-tabs">
       <div class="tab" :class="{ active: activeTab === 'files' }" @click="activeTab='files'">📁 文件</div>
       <div class="tab" :class="{ active: activeTab === 'projects' }" @click="activeTab='projects'">📦 项目</div>
-      <div class="tab" :class="{ active: activeTab === 'workgroups' }" @click="activeTab='workgroups'">⚙ 工作组</div>
     </div>
 
     <!-- 文件浏览器 -->
@@ -47,22 +46,6 @@
       </div>
     </div>
 
-    <!-- 工作组详情 -->
-    <div v-if="activeTab==='workgroups'" class="workgroups-panel">
-      <div v-for="wg in workgroups" :key="wg.id" class="wg-detail-card">
-        <div class="wg-d-head">
-          <span class="wg-d-name">{{ wg.name }}</span>
-          <span class="wg-d-steps">{{ wg.pipeline_steps }}步</span>
-        </div>
-        <div class="wg-d-desc">{{ wg.description }}</div>
-        <div class="wg-d-meta">
-          <label>角色:</label> {{ (wg.members||[]).join(', ') }}
-        </div>
-        <div class="wg-d-meta">
-          <label>关键词:</label> {{ (wg.trigger_keywords||[]).join(', ') }}
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 

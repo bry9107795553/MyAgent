@@ -576,9 +576,10 @@ onMounted(()=>{
 /* ==== 工作组顶部横栏 ==== */
 .workgroup-bar {
   display: flex; align-items: center; gap: 6px;
-  padding: 10px 24px; background: #f9fafb;
+  padding: 8px 24px; background: #f9fafb;
   border-bottom: 1px solid #e5e7eb; flex-shrink: 0;
-  overflow-x: auto;
+  overflow-x: auto; flex-wrap: nowrap;
+  scrollbar-width: thin;
 }
 .workgroup-bar::-webkit-scrollbar { height: 4px; }
 .wg-bar-label { font-size: 11px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; margin-right: 4px; }
