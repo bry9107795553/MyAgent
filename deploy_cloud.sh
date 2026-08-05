@@ -61,6 +61,25 @@ mkdir -p "$TARGET"
 rm -rf "$TARGET"/*
 cp -r dist/* "$TARGET"/
 
+# 同步更新 nginx 配置（含 WebSocket 支持，避免 [分析中...] 卡住）
+echo ""
+echo "=== 步骤5.5: 同步 nginx 配置（含 WebSocket 代理）==="
+NGINX_CONF=/etc/nginx/nginx.conf
+if [ -f "$D/nginx.conf" ]; then
+    if [ -w "$NGINX_CONF" ]; then
+        cp "$NGINX_CONF" "$NGINX_CONF.bak.$(date +%s)" 2>/dev/null
+        cp "$D/nginx.conf" "$NGINX_CONF"
+        if nginx -t 2>/dev/null && nginx -s reload 2>/dev/null; then
+            echo "  ✓ nginx 已重载（含 WebSocket 支持）"
+        else
+            echo "  ⚠ nginx 重载失败，回滚中"
+            ls -t /etc/nginx/nginx.conf.bak.* 2>/dev/null | head -1 | xargs -I {} cp {} "$NGINX_CONF"
+        fi
+    else
+        echo "  ⚠ nginx.conf 不可写，跳过（WebSocket 可能不通）"
+    fi
+fi
+
 echo ""
 echo "============================================"
 echo "  部署完成！"
