@@ -45,22 +45,22 @@ onMounted(() => {
 
 <style>
 :root {
-  --bg-0: #0f0f1a;
-  --bg-1: #1a1a2e;
-  --bg-2: #16213e;
-  --text-0: #e8e8f0;
-  --text-1: #c8d8e8;
-  --text-2: #8aa8c8;
-  --accent: #6c5ce7;
-  --accent-2: #00cec9;
-  --border: rgba(255,255,255,0.08);
+  --bg-0: #ffffff;
+  --bg-1: #ffffff;
+  --bg-2: #f3f4f6;
+  --text-0: #1f2937;
+  --text-1: #4b5563;
+  --text-2: #9ca3af;
+  --accent: #4f46e5;
+  --accent-2: #6366f1;
+  --border: #e5e7eb;
   --radius: 12px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-  background: var(--bg-0);
+  background: #f0f2f5;
   color: var(--text-0);
   font-family: "SF Pro Text", "PingFang SC", -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 15px;
@@ -78,7 +78,7 @@ body {
   align-items: center;
   padding: 0 24px;
   height: 56px;
-  background: var(--bg-1);
+  background: #ffffff;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -109,12 +109,13 @@ body {
 
 .nav-item:hover {
   color: var(--text-0);
-  background: rgba(255,255,255,0.05);
+  background: #f3f4f6;
 }
 
 .nav-item.router-link-active {
-  color: var(--accent-2);
-  background: rgba(0,206,201,0.1);
+  color: var(--accent);
+  background: #eef2ff;
+  font-weight: 500;
 }
 
 .app-status {
@@ -129,15 +130,16 @@ body {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #e8463a;
+  background: #ef4444;
 }
 
 .status-dot.online {
-  background: #00b894;
+  background: #10b981;
 }
 
 .app-main {
   flex: 1;
   overflow: hidden;
+  background: #f0f2f5;
 }
 </style>
