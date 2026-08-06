@@ -122,6 +122,7 @@
                 <span class="file-size">{{ f.size }}</span>
               </div>
             </div>
+          </div>
         </div>
       </div>
     </aside>
