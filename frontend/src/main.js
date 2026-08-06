@@ -8,11 +8,12 @@ import ChatView from './views/ChatView.vue'
 import WorkbenchView from './views/WorkbenchView.vue'
 import SkinMarketView from './views/SkinMarketView.vue'
 import BrowserView from './views/BrowserView.vue'
+import WorkgroupView from './views/WorkgroupView.vue'
 
 const routes = [
   { path: '/', name: 'chat', component: ChatView },
   { path: '/history', redirect: '/' },
-  { path: '/workgroups', redirect: '/' },
+  { path: '/workgroups', name: 'workgroups', component: WorkgroupView },
   { path: '/plugins', redirect: '/' },
   { path: '/browse', name: 'browse', component: BrowserView },
   { path: '/workbench', name: 'workbench', component: WorkbenchView },

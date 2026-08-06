@@ -119,10 +119,17 @@ function switchModel(m) {
 
 async function checkHealth() {
   try {
-    const res = await fetch('/api/health')
+    const res = await fetch('/api/system')
     const data = await res.json()
-    llmOnline.value = data.llm_available
-  } catch { llmOnline.value = false }
+    llmOnline.value = data.llm_available || false
+    if (data.gpu?.model) modelName.value = data.gpu.model
+  } catch {
+    try {
+      const res = await fetch('/api/health')
+      const data = await res.json()
+      llmOnline.value = data.llm_available
+    } catch { llmOnline.value = false }
+  }
 }
 
 onMounted(() => { checkHealth(); setInterval(checkHealth, 10000) })
