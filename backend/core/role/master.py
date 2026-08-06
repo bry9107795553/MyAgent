@@ -396,8 +396,9 @@ class MasterRole(RoleBase):
 
             # Plan-First: 开发类 → 模糊需求展示计划，明确需求直接执行
             if matched_wg.get("conditions", {}).get("auto_approve") and wg_id.startswith("dev_"):
-                is_specific = len(user_message.strip()) >= 15 and "？" not in user_message and "?" not in user_message and not re.search(r'[吗呃吧]$', user_message)
-                
+                # 开发类只看有没有"开发/做/建 + 实体"动词
+                is_specific = bool(re.search(r'(开发|做|建|搭|创建|实现|写)', user_message)) and len(user_message.strip()) >= 8 and not re.search(r'[？?吗呃吧呢]$', user_message)
+
                 if not is_specific:
                     plan = self._build_execution_plan(matched_wg, user_message)
                     self._pending_plan = {"wg": matched_wg, "msg": user_message, "pipeline": pipeline}
