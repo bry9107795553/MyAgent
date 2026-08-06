@@ -344,6 +344,16 @@ class MasterRole(RoleBase):
             yield "] "
             # 多角色也需要完整输出 → 非流式
             results = await self._dispatch_to_roles(user_message, matched_roles)
+            if not results:
+                # 角色执行失败 → 降级走通用 LLM 流式处理，不要弹错误
+                task_id = generate_id("task")
+                ctx = self._assemble_context(user_message, task_id, "")
+                full_response = []
+                async for token in self._call_llm_stream(ctx):
+                    full_response.append(token)
+                    yield token
+                self._record_task(user_message, "".join(full_response), task_id)
+                return
             content = self._aggregate_results(user_message, results)
             yield content
             return
