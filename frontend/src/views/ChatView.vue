@@ -61,10 +61,12 @@
 
       <div class="input-area">
         <div class="input-box">
-          <textarea v-model="txt" placeholder="发消息或输入关键词触发工作组..." rows="1" @keydown.enter.exact.prevent="send" @input="autoResize" ref="inputEl" :disabled="streaming"></textarea>
-          <button class="send-btn" @click="send" :disabled="streaming || !txt.trim()">
-            <svg v-if="!streaming" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8l12-5-4 12-2-5-6-2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
-            <div v-else class="loading-dots"><span></span><span></span><span></span></div>
+          <textarea v-model="txt" placeholder="发消息或输入关键词触发工作组..." rows="1" @keydown.enter.exact.prevent="send" @input="autoResize" ref="inputEl"></textarea>
+          <button class="stop-btn" v-if="streaming" @click="stopStreaming">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="2" width="10" height="10" rx="1.5"/></svg>
+          </button>
+          <button class="send-btn" v-else @click="send" :disabled="!txt.trim()">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8l12-5-4 12-2-5-6-2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
           </button>
         </div>
         <div class="input-hint">Enter 发送 · Shift+Enter 换行 — 说「开发XX」触发完整流水线</div>
@@ -134,7 +136,7 @@ import { ref, nextTick, onMounted, computed } from 'vue'
 import { marked } from 'marked'
 
 const agents = ref([]), currentAgent = ref(''), messages = ref([]), txt = ref('')
-const streaming = ref(false), buf = ref(''), msgEl = ref(null), inputEl = ref(null), lastMeta = ref(null)
+const streaming = ref(false), buf = ref(''), msgEl = ref(null), inputEl = ref(null), lastMeta = ref(null), activeWs = ref(null)
 const llmOnline = ref(false), modelName = ref('Qwen3-30B-A3B'), roles = ref([]), workgroups = ref([])
 const pipelineActive = ref(false), pipelineSteps = ref([]), lastPipeline = ref([]), selectedStep = ref(null)
 const displaySteps = computed(() => pipelineActive.value ? pipelineSteps.value : lastPipeline.value)
@@ -331,6 +333,7 @@ async function send() {
   selectedStep.value = 0; rightTab.value = 'pipeline'
 
   const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/api/agents/' + currentAgent.value + '/ws')
+  activeWs.value = ws
   ws.onopen = () => ws.send(JSON.stringify({ message: t }))
   ws.onmessage = e => {
     const d = JSON.parse(e.data)
@@ -405,6 +408,16 @@ function parsePipelineOutput(text) {
   return steps
 }
 function sendQuick(t) { txt.value = t; nextTick(() => { send() }) }
+function stopStreaming() {
+  if (activeWs.value) { activeWs.value.close(); activeWs.value = null }
+  streaming.value = false; pipelineActive.value = false
+  // 保留已接收的部分内容作为消息
+  if (buf.value) {
+    messages.value.push({ role: 'assistant', content: buf.value + '\n\n⚠ 已停止', meta: lastMeta.value || undefined })
+    buf.value = ''; lastMeta.value = null
+    saveCurrentToStorage(); refreshConversationList()
+  }
+}
 function scroll() { nextTick(() => { if (msgEl.value) { msgEl.value.scrollTop = msgEl.value.scrollHeight; initCodeFolding() } }) }
 function resetInputHeight() { if (inputEl.value) inputEl.value.style.height = 'auto' }
 function autoResize(e) { const el = e.target; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 160) + 'px' }
@@ -514,6 +527,9 @@ onMounted(() => {
 .send-btn { width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0; background: var(--accent); border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
 .send-btn:hover:not(:disabled) { background: var(--accent-hover); transform: scale(1.04); }
 .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.stop-btn { width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0; background: #e74c3c; border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; animation: pulse-stop 1.5s ease-in-out infinite; }
+.stop-btn:hover { background: #c0392b; }
+@keyframes pulse-stop { 0%,100% { box-shadow: 0 0 0 0 rgba(231,76,60,0.4); } 50% { box-shadow: 0 0 0 6px rgba(231,76,60,0); } }
 .loading-dots { display: flex; gap: 3px; }
 .loading-dots span { width: 4px; height: 4px; background: #fff; border-radius: 50%; animation: dot-bounce 1.4s infinite ease-in-out both; }
 .loading-dots span:nth-child(2) { animation-delay: 0.16s; }

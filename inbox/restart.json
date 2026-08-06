@@ -9,8 +9,8 @@
   "cloud_instance": {
     "host": "u-3004-abffcef6",
     "path": "/workspace/template-repos/template-2603/repo",
-    "public_url": "https://rc-53833487fc7b93ab.radeon.firstdg.ai",
-    "status": "running — 云端代码已是最新，流水线基本可跑"
+    "public_url": "https://rc-f1205441de98f087.radeon.firstdg.ai",
+    "status": "🟢 运行中 — 健康检查通过, 18角色, 10工作组, Qwen2.5-14B, 单卡模式"
   },
 
   "completed": {
