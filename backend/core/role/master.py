@@ -400,6 +400,12 @@ class MasterRole(RoleBase):
             wg_name = matched_wg.get("name", "工作组")
 
             # 让前台 LLM 自由回应：先告诉用户谁来处理，再确认或追问
+            wg_id = matched_wg.get("id", "")
+            self._last_stream_dispatch = {
+                "type": "workgroup",
+                "workgroup": matched_wg.get("name", wg_id),
+                "roles_used": matched_wg.get("members", []),
+            }
             ctx = self._assemble_context(
                 f"用户说：{user_message}\n\n"
                 f"这个需求匹配到了「{wg_name}」工作组（{', '.join(matched_wg.get('members', [])[:5])}...）。"
@@ -413,8 +419,8 @@ class MasterRole(RoleBase):
                 yield token
 
             response = "".join(full_response)
-            # LLM 的输出里出现这些词才自动启动流水线
-            if any(kw in response for kw in ["开始执行", "马上安排", "立刻安排", "直接开始"]):
+            # LLM 输出里出现这些词就自动启动流水线
+            if any(kw in response for kw in ["开始执行", "马上安排", "立刻安排", "直接开始", "开始行动", "立即安排", "我交给"]):
                 yield "\n"
                 async for token in self._execute_workgroup_stream(matched_wg, user_message, pipeline):
                     yield token
