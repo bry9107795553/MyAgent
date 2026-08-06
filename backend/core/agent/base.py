@@ -239,50 +239,71 @@ class BaseAgent:
 
     def _extract_and_save_artifacts(self, text: str):
         """
-        自动从回复中提取 Markdown / HTML 代码块，保存到 data/outputs/。
-        前端预览面板会列出这些文件。
+        自动从回复中提取可落盘的内容：
+        1. Markdown / HTML 代码块
+        2. 助手自己说"保存到/已写入 X 路径" → 真写过去
         """
         import re
         from pathlib import Path
         from datetime import datetime
-        from core.memory.store import now_iso
 
         outputs_dir = Path("data/outputs")
         outputs_dir.mkdir(parents=True, exist_ok=True)
 
-        # 匹配 Markdown 代码块：```lang\n...\n``` 或 ```\n...\n```
-        code_blocks = re.findall(r'```(\w*)\n([\s\S]*?)\n```', text)
         saved = []
         ts = datetime.now().strftime("%H%M%S")
+
+        # ── 1. Markdown / HTML 代码块 ──
+        code_blocks = re.findall(r'```(\w*)\n([\s\S]*?)\n```', text)
         for i, (lang, body) in enumerate(code_blocks, 1):
-            if len(body) < 200:  # 太短的不算产物（避免误存代码片段）
+            if len(body) < 200:
                 continue
-            # 推断文件后缀
             ext_map = {"markdown": "md", "md": "md", "html": "html", "htm": "html",
                        "python": "py", "javascript": "js", "typescript": "ts",
                        "json": "json", "yaml": "yml", "shell": "sh", "bash": "sh",
                        "css": "css", "scss": "scss"}
             ext = ext_map.get(lang.lower(), lang.lower() if lang else "txt")
-            # 文件名：时间戳 + 序号 + 后缀
             filename = f"output_{ts}_{i}.{ext}"
-            target = outputs_dir / filename
-            try:
-                target.write_text(body, encoding="utf-8")
-                saved.append(str(target))
-            except Exception as e:
-                print(f"[Agent] 产物落盘失败: {e}")
+            (outputs_dir / filename).write_text(body, encoding="utf-8")
+            saved.append(filename)
 
-        # 也检测大段 HTML（无代码块包裹的 <!DOCTYPE><html>...</html>）
+        # 大段 HTML（无代码块包裹）
         if not saved:
             html_match = re.search(r'<!DOCTYPE[\s\S]*?</html>', text, re.IGNORECASE)
             if html_match and len(html_match.group()) > 500:
                 filename = f"output_{ts}_html.html"
-                target = outputs_dir / filename
+                (outputs_dir / filename).write_text(html_match.group(), encoding="utf-8")
+                saved.append(filename)
+
+        # ── 2. 助手声称"保存到/已写入 X 路径"但实际没写 → 真写 ──
+        not_written = re.search(
+            r'(?:已?保存[至到]|已写入|文件[已存]在|落盘到)\s*[：:]?\s*([^\s\n]{3,200})',
+            text
+        )
+        if not_written:
+            claimed_path = not_written.group(1).rstrip("。，,.")
+            # 提取回复里的实质文本：跳过路径声明行，取余下的纯文本
+            lines = text.split("\n")
+            content_lines = []
+            for line in lines:
+                if claimed_path in line or "保存至" in line or "已保存" in line or "已写入" in line:
+                    continue
+                if line.strip():
+                    content_lines.append(line)
+            body = "\n".join(content_lines).strip()
+            if body and len(body) > 50:
+                target = Path(claimed_path)
+                if not target.is_absolute():
+                    target = Path(claimed_path)  # 保留为相对路径
+                target.parent.mkdir(parents=True, exist_ok=True)
                 try:
-                    target.write_text(html_match.group(), encoding="utf-8")
+                    target.write_text(body, encoding="utf-8")
                     saved.append(str(target))
                 except Exception:
-                    pass
+                    # 路径无效 → 回退到 outputs/
+                    fallback = outputs_dir / f"output_{ts}_claimed.txt"
+                    fallback.write_text(body, encoding="utf-8")
+                    saved.append(str(fallback))
 
         if saved:
             print(f"[Agent] 自动落盘 {len(saved)} 个产物: {saved}")
