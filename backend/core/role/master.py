@@ -394,27 +394,31 @@ class MasterRole(RoleBase):
                 return
 
         else:  # level == 3
-            # Level 3: 组团干 — 所有工作组统一走：先追问→再执行
+            # Level 3: 组团干 — 让前台 LLM 先和用户对话，确认需求
             matched_wg = detail
             pipeline = matched_wg.get("pipeline", [])
+            wg_name = matched_wg.get("name", "工作组")
 
-            # 模糊度守卫
-            text, options = self._check_vague_request(user_message, matched_wg)
-            if text:
-                async for chunk in self._stream_text(text, chunk_size=3, delay=0.02):
-                    yield chunk
-                if options:
-                    yield ("[[OPTIONS]]" + json.dumps(options, ensure_ascii=False) + "[[/OPTIONS]]")
-                return
-
-            # 需求清晰 → 直接执行
-            async for token in self._execute_workgroup_stream(matched_wg, user_message, pipeline):
-                yield token
-            secretary.record_turn(
-                user_message=user_message,
-                role_response="(pipeline)",
-                role_id=matched_wg.get("id", "master"),
+            # 让前台 LLM 自由回应：可以追问、确认、或直接安排执行
+            ctx = self._assemble_context(
+                f"用户说：{user_message}\n\n这个需求匹配到了「{wg_name}」工作组。"
+                f"作为前台接待，请根据工作守则判断：需求够清楚就直接安排执行，如果还需要了解什么就先问用户。",
+                generate_id("task"), ""
             )
+            full_response = []
+            async for token in self._call_llm_stream(ctx):
+                full_response.append(token)
+                yield token
+
+            response = "".join(full_response)
+            # LLM 的输出里出现这些词才自动启动流水线
+            if any(kw in response for kw in ["开始执行", "马上安排", "立刻安排", "直接开始"]):
+                yield "\n"
+                async for token in self._execute_workgroup_stream(matched_wg, user_message, pipeline):
+                    yield token
+
+            self._record_task(user_message, response, generate_id("task"))
+            secretary.record_turn(user_message=user_message, role_response=response, role_id="master")
             return
 
     # ── 多任务拆解 ──
