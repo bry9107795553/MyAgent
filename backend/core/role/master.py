@@ -417,7 +417,7 @@ class MasterRole(RoleBase):
                 self._record_task(user_message, response, generate_id("task"))
                 return
 
-            if any(kw in response for kw in ["开始执行", "马上安排", "立刻安排", "直接开始", "开始行动", "立即安排"]):
+            if any(kw in response for kw in ["开始执行", "马上安排", "立刻安排", "直接开始", "开始行动", "立即安排", "启动团队", "开始了", "可以开始", "现在开始"]):
                 yield "\n"
                 brief = self._build_brief(user_message)
                 async for token in self._execute_workgroup_stream(matched_wg, brief, pipeline):
