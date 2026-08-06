@@ -212,16 +212,22 @@ function initCodeFolding() {
 }
 
 // ---- HTML 预览 ----
-function hasHtmlCode(text) { return /<(!DOCTYPE|html|head|body|div|script|style)/i.test(text) }
+function hasHtmlCode(text) {
+  // 严格判断：必须存在 HTML 代码块或以 <!DOCTYPE/<html> 开头的片段
+  return /```(?:html)?\s*[\s\S]*?```/.test(text) ||
+         /<!DOCTYPE\s+html/i.test(text) ||
+         /<html[\s>]/i.test(text)
+}
 function extractHtml(text) {
-  const match = text.match(/```(?:html)?\s*\n?([\s\S]*?)```/)
-  if (match) return match[1]
-  if (text.trim().startsWith('<')) {
-    const lines = text.split('\n')
-    const start = lines.findIndex(l => l.trim().startsWith('<!') || l.trim().startsWith('<html') || l.trim().startsWith('<'))
-    if (start >= 0) return lines.slice(start).join('\n')
+  // 优先匹配 ```html 代码块
+  const m = text.match(/```html\s*\n?([\s\S]*?)```/i)
+  if (m && m[1].trim().length > 50) return m[1]
+  // 次优：任何代码块里包含 <html 或 <!DOCTYPE
+  const blocks = [...text.matchAll(/```(\w*)\n?([\s\S]*?)```/g)]
+  for (const b of blocks) {
+    if (/<(!DOCTYPE|html|head|body)[\s\S]*<\/\s*html\s*>/i.test(b[2])) return b[2]
   }
-  return text
+  return null
 }
 
 // ---- 对话管理 ----
@@ -325,7 +331,10 @@ async function send() {
         lastPipeline.value = [...pipelineSteps.value]; selectedStep.value = 0
       }
       pipelineActive.value = false
-      if (hasHtmlCode(final)) { htmlContent.value = extractHtml(final); rightTab.value = 'preview' }
+      if (hasHtmlCode(final)) {
+        const html = extractHtml(final)
+        if (html) { htmlContent.value = html; rightTab.value = 'preview' }
+      }
     }
   }
   ws.onerror = () => { streaming.value = false; buf.value = ''; pipelineActive.value = false }

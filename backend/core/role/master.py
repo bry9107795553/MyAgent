@@ -301,7 +301,6 @@ class MasterRole(RoleBase):
                     evt, output = await asyncio.wait_for(pq.get(), timeout=0.3)
                     buf += evt
                     if output and len(output) > 0:
-                        # 把角色输出限长后也丢给对话
                         preview = output if len(output) < 600 else output[:600] + "\n... (已截断)"
                         buf += f"\n\n### 步骤 {role_id} 产出\n\n{preview}\n"
                 except asyncio.TimeoutError:
@@ -318,7 +317,8 @@ class MasterRole(RoleBase):
                     buf += f"\n\n### 步骤产出\n\n{preview}\n"
             if buf:
                 yield buf
-            yield await pipe_task
+            # 等待任务完成取最终汇总（不输出完整 blob 到对话，避免重复）
+            await pipe_task
             return
 
         # 关键词匹配角色
