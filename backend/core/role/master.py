@@ -411,22 +411,14 @@ class MasterRole(RoleBase):
 
             response = "".join(full_response)
 
-            # 前台说了"开始执行"等触发词 → 启动
-            if not self._is_asking_question(response):
-                print(f"[Master] Level 3 → 弹出开始执行按钮 (response不含问号)")
-                self._pending_wg = {"wg": matched_wg, "msg": user_message, "pipeline": pipeline}
-                yield ("[[OPTIONS]]" + json.dumps([{
-                    "id": "confirm_start", "label": "开始执行", "multi": False,
-                    "options": [{"label": "✅ 开始执行", "value": "开始执行"}]
-                }], ensure_ascii=False) + "[[/OPTIONS]]")
-                self._record_task(user_message, response, generate_id("task"))
-                return
-            else:
-                print(f"[Master] Level 3 → 前台还在提问, 等用户回答")
-
-            # LLM 在提问 → 等用户回答
+            # 前台说完直接出按钮——用户点击启动流水线
+            print(f"[Master] Level 3 → 弹出按钮 (response长度={len(response)})")
+            self._pending_wg = {"wg": matched_wg, "msg": user_message, "pipeline": pipeline}
+            yield ("[[OPTIONS]]" + json.dumps([{
+                "id": "confirm_start", "label": "开始执行", "multi": False,
+                "options": [{"label": "✅ 开始执行", "value": "开始执行"}]
+            }], ensure_ascii=False) + "[[/OPTIONS]]")
             self._record_task(user_message, response, generate_id("task"))
-            secretary.record_turn(user_message=user_message, role_response=response, role_id="master")
             return
 
     @staticmethod
