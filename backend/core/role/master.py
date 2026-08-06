@@ -407,13 +407,32 @@ class MasterRole(RoleBase):
             response = "".join(full_response)
             if any(kw in response for kw in ["开始执行", "马上安排", "立刻安排", "直接开始", "开始行动", "立即安排", "让教练"]):
                 yield "\n"
-                # 让教练（流水线第一步）接手：分析需求 → 出计划 → 派发
-                async for token in self._execute_workgroup_stream(matched_wg, user_message, pipeline):
+                # 编译简报：原始需求 + 前台对话收集到的所有信息
+                brief = self._build_brief(user_message)
+                async for token in self._execute_workgroup_stream(matched_wg, brief, pipeline):
                     yield token
 
             self._record_task(user_message, response, generate_id("task"))
             secretary.record_turn(user_message=user_message, role_response=response, role_id="master")
             return
+
+    def _build_brief(self, user_message: str) -> str:
+        """从前台与用户的对话历史中编译简报，传给教练"""
+        lines = [f"# 用户需求简报\n\n原始需求：{user_message}\n\n## 接待中收集到的信息\n"]
+        recent = self._wm.get_recent(n=20) if hasattr(self, '_wm') else []
+        qa_count = 0
+        for msg in recent[-8:]:
+            if msg.get('role') == 'assistant' and msg.get('content'):
+                # 只提取前台的提问（assistant 消息含"？"的）
+                content = msg['content']
+                if '?' in content or '？' in content or '吗' in content or '呢' in content:
+                    qa_count += 1
+                    lines.append(f"前台问：{content[:150]}\n")
+            elif msg.get('role') == 'user' and msg.get('content') != user_message:
+                lines.append(f"用户答：{msg['content'][:150]}\n")
+        if qa_count == 0:
+            lines.append("(前台没有追问，用户直接进入)\n")
+        return "".join(lines)
 
     # ── 多任务拆解 ──
 
