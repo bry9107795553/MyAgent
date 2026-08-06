@@ -712,11 +712,15 @@ class MasterRole(RoleBase):
                 elif isinstance(role_ids, list):
                     matched_role_ids.update(role_ids)
 
-        # 质量门禁规则: 涉及内容产出的任务必须加质检
+        # 质量门禁规则：复杂任务加质检，简单任务不加
+        # 规则：任务消息 > 50 字符 或 明确写了"报告/文章/长文" → 加 quality_checker
         content_production = {"report_writing", "email_drafting", "copywriting"}
+        is_complex = len(message.strip()) > 50 or any(kw in message for kw in ["报告", "文章", "论文", "长文", "详细"])
         for cap in content_production:
             if capability_map.get(cap) in matched_role_ids:
-                matched_role_ids.add("quality_checker")
+                if is_complex:
+                    matched_role_ids.add("quality_checker")
+                # 简单写作不追加质检
 
         # 开发类任务: 先加 coach
         dev_capabilities = {"module_implementation", "design_system", "architecture_review"}

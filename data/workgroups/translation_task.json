@@ -2,7 +2,7 @@
   "id": "translation_task",
   "name": "翻译工作组",
   "description": "负责翻译、本地化等任务，参考术语库进行翻译，并通过术语一致性和语法校验确保翻译质量。",
-  "trigger_keywords": ["翻译", "translate", "中译英", "英译中", "本地化"],
+  "trigger_keywords": ["翻译文档", "翻译这本书", "翻译报告", "本地化文档", "多语言翻译"],
   "trigger_examples": [
     "把这段中文翻译成英文",
     "帮我把这份文档本地化为日语",
