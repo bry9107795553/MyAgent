@@ -166,8 +166,8 @@ function smartMd(t) {
     const short = think.slice(0, 120).replace(/\n/g, ' ') + '...'
     return `<details class="think-chain"><summary>思考过程 · ${short}</summary><div class="think-content">${marked(think)}</div></details>`
   })
-  // 选项按钮解析：__OPTIONS__[{...},{...}]__/OPTIONS__
-  t = t.replace(/__OPTIONS__([\s\S]*?)__\/OPTIONS__/g, (_, json) => {
+  // 选项按钮解析：[[OPTIONS]][{...},{...}][[/OPTIONS]]
+  t = t.replace(/\[\[OPTIONS\]\]([\s\S]*?)\[\[\/OPTIONS\]\]/g, (_, json) => {
     try {
       const opts = JSON.parse(json)
       const btns = opts.map(g => {

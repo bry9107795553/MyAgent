@@ -308,9 +308,9 @@ class MasterRole(RoleBase):
             if text:
                 async for chunk in self._stream_text(text, chunk_size=3, delay=0.02):
                     yield chunk
-                # 发送选项事件（前端渲染为可点击按钮）
+                # 发送选项事件（前端渲染为可点击按钮）—— 用 [[OPTIONS]] 避开 markdown 解析
                 if options:
-                    yield ("__OPTIONS__" + json.dumps(options, ensure_ascii=False) + "__/OPTIONS__")
+                    yield ("[[OPTIONS]]" + json.dumps(options, ensure_ascii=False) + "[[/OPTIONS]]")
                 return
 
             # Plan-First: 开发类工作组 → 先展示计划，确认后再执行
