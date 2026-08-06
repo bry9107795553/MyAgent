@@ -79,9 +79,19 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
-# ===== 3. Nginx =====
-echo -e "\n${YELLOW}[3/4] 启动 Nginx...${NC}"
+# ===== 3. 前端构建 + Nginx =====
+echo -e "\n${YELLOW}[3/4] 构建前端 + 启动 Nginx...${NC}"
 WEB_ROOT="/var/www/myagent"
+
+# 重新构建前端（dist/ 可能过期）
+if [ -d "$FRONTEND_DIR/node_modules" ] && [ -f "$FRONTEND_DIR/package.json" ]; then
+    cd "$FRONTEND_DIR"
+    if [ -f "$FRONTEND_DIR/src/views/ChatView.vue" ]; then
+        echo "  重建前端 dist/..."
+        npm run build > /tmp/frontend-build.log 2>&1 && echo -e "  ${GREEN}✓${NC} 前端构建成功" || echo -e "  ${YELLOW}⚠${NC} 前端构建失败 (看 /tmp/frontend-build.log)"
+    fi
+fi
+
 if [ -f "$FRONTEND_DIR/dist/index.html" ]; then
     mkdir -p "$WEB_ROOT" 2>/dev/null
     cp -r "$FRONTEND_DIR/dist/." "$WEB_ROOT/" 2>/dev/null || true
