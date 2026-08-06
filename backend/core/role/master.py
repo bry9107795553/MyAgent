@@ -380,8 +380,14 @@ class MasterRole(RoleBase):
             return ("", [])
 
         msg = message.strip()
+
+        # 追问（不是新需求）：带问号/以"呢/吗"结尾/以"我的"开头 → 不拦截，走通用对话
+        import re
+        if re.search(r'[？?]$', msg) or re.search(r'(呢|吗|啊|吧)$', msg) or msg.startswith("我的") or msg.startswith("那个"):
+            return ("", [])
+
         # 太短 → 反问用途/风格/功能
-        if len(msg) <= 10:
+        if len(msg) <= 6:
             return (
                 f"好的，你想「{msg}」——不过在开始之前，我需要了解几个关键点：\n\n",
                 [
@@ -519,10 +525,14 @@ class MasterRole(RoleBase):
         await pipe_task
 
     def _is_simple_greeting(self, message: str) -> bool:
-        """判断是否为简单问候/闲聊 (不需要调度)"""
+        """判断是否为简单问候/闲聊 (不调度)。严格匹配，防止误判短消息"""
         msg = message.strip().lower()
-        greetings = {"你好", "hi", "hello", "hey", "早", "晚安", "谢谢", "再见", "bye"}
-        return msg in greetings or len(msg) < 3
+        greetings = {
+            "你好", "hi", "hello", "hey", "嗨", "早", "早安", "晚安", "晚上好", "早上好",
+            "谢谢", "再见", "bye", "拜拜", "感谢",
+            "在吗", "在么", "在?", "在？",
+        }
+        return msg in greetings
 
     async def _handle_greeting(self, message: str) -> str:
         """处理简单问候"""
