@@ -318,7 +318,7 @@ function selectAgent(id) { currentAgent.value = id; messages.value = [] }
 async function send() {
   const text = txt.value.trim()
   if (!text || !currentAgent.value || streaming.value) return
-  const t = text; txt.value = ''; resetInputHeight()
+  const t = text; txt.value = ''; resetInputHeight(); nextTick(() => inputEl.value?.focus())
   messages.value.push({ role: 'user', content: t }); scroll()
 
   if (!currentConversation.value) {
