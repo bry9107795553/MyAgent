@@ -56,6 +56,31 @@ from core.tools.base import tool_registry  # 导入即触发 builtin 工具注�
 # 工具调用最大轮次上限（防止模型死循环反复调工具占死 GPU / 上机演示卡死）
 MAX_TOOL_ITERATIONS = 5
 
+# 单轮工具调用数上限 + LLM 重复调用去重（14B 模型偶尔返回 20-30 个相同调用）
+MAX_TOOL_CALLS_PER_TURN = 10
+
+
+def _dedup_tool_calls(tool_calls: list[dict]) -> list[dict]:
+    """去重：同一函数+同一参数只执行一次，防止 LLM 幻觉重复调用。"""
+    seen: set[tuple[str, str]] = set()
+    unique: list[dict] = []
+    for tc in tool_calls:
+        fn = tc.get("function", {})
+        name = fn.get("name", "")
+        args = fn.get("arguments", "{}") or "{}"
+        # 标准化参数: 排序 key，忽略对象内的顺序差异
+        try:
+            args_norm = json.dumps(json.loads(args) if isinstance(args, str) else (args or {}), sort_keys=True)
+        except Exception:
+            args_norm = json.dumps(args, sort_keys=True)
+        key = (name, args_norm)
+        if key not in seen:
+            seen.add(key)
+            unique.append(tc)
+    if len(tool_calls) > len(unique):
+        print(f"[Role:*] ⚠ 工具去重: {len(tool_calls)} → {len(unique)} (有 {len(tool_calls) - len(unique)} 个重复)")
+    return unique
+
 PROMPT_SECTIONS = [
     "identity",
     "responsibilities",
@@ -412,6 +437,13 @@ class RoleBase(ABC):
             last_content = content or last_content
             tool_calls = result.get("tool_calls") or []
 
+            # 去重 & 上限：防止 14B 模型一次返回 20+ 个重复调用
+            if tool_calls:
+                tool_calls = _dedup_tool_calls(tool_calls)
+                if len(tool_calls) > MAX_TOOL_CALLS_PER_TURN:
+                    print(f"[Role:{self.id}] ⚠ 单轮工具调用超限: {len(tool_calls)} → 截断为 {MAX_TOOL_CALLS_PER_TURN}")
+                    tool_calls = tool_calls[:MAX_TOOL_CALLS_PER_TURN]
+
             # 模型不再要求调工具 → 本轮就是最终答案
             if not tool_calls:
                 return content
@@ -528,6 +560,13 @@ class RoleBase(ABC):
                     print(f"[Role:{self.id}] ℹ 流式模式回退 reasoning ({len(reasoning)} chars)")
             last_content = content or last_content
             tool_calls = result.get("tool_calls") or []
+
+            # 去重 & 上限（同非流式路径）
+            if tool_calls:
+                tool_calls = _dedup_tool_calls(tool_calls)
+                if len(tool_calls) > MAX_TOOL_CALLS_PER_TURN:
+                    print(f"[Role:{self.id}] ⚠ 单轮工具调用超限: {len(tool_calls)} → 截断为 {MAX_TOOL_CALLS_PER_TURN}")
+                    tool_calls = tool_calls[:MAX_TOOL_CALLS_PER_TURN]
 
             if not tool_calls:
                 # 模型不再要求调工具 → 用流式产出最终回复
