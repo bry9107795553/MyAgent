@@ -400,7 +400,7 @@ class MasterRole(RoleBase):
             }
             ctx = self._assemble_context(
                 f"用户说：{user_message}\n\n匹配到了「{wg_name}」工作组。"
-                f"你是前台接待。5个核心信息(用途/功能/风格/平台/时间)里用户已经说了几样。其余用大白话问。",
+                f"5个核心信息(用途/功能/风格/平台/时间)：用户说了几个就少问几个。全都说了直接回复'开始执行'启动团队。",
                 generate_id("task"), ""
             )
             full_response = []
