@@ -430,9 +430,9 @@ class MasterRole(RoleBase):
                 r = self._role_pool.get("writer")
                 if r: return (2, [r])
 
-        # 创意写作/诗歌 → creative
-        if any(k in msg for k in ["诗", "诗歌", "故事", "小说", "创作"]):
-            r = self._role_pool.get("creative")
+        # 文学创作/诗歌/故事 → writer（creative 是头脑风暴角色，不适合文学创作）
+        if any(k in msg for k in ["诗", "诗歌", "故事", "小说", "一首", "一篇"]):
+            r = self._role_pool.get("writer")
             if r: return (2, [r])
 
         # 文件操作：保存/写文件 → writer 或 creative（根据是否含创作关键词）
