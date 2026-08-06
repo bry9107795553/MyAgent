@@ -396,7 +396,7 @@ class MasterRole(RoleBase):
             }
             ctx = self._assemble_context(
                 f"用户说：{user_message}\n\n匹配到了「{wg_name}」工作组。"
-                f"把用户当小白：用大白话问 1 个简单问题，然后立刻说'好的，我让教练来分析，请稍等'。",
+                f"用大白话问 1 个最关键的问题，不要立刻派发。等用户回答下一轮再根据简报启动团队。",
                 generate_id("task"), ""
             )
             full_response = []
@@ -405,7 +405,7 @@ class MasterRole(RoleBase):
                 yield token
 
             response = "".join(full_response)
-            if any(kw in response for kw in ["开始执行", "马上安排", "立刻安排", "直接开始", "开始行动", "立即安排", "让教练"]):
+            if any(kw in response for kw in ["开始执行", "马上安排", "立刻安排", "直接开始", "开始行动", "立即安排"]):
                 yield "\n"
                 # 编译简报：原始需求 + 前台对话收集到的所有信息
                 brief = self._build_brief(user_message)
