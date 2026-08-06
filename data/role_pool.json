@@ -15,7 +15,11 @@
         "aggregate",
         "progress_report"
       ],
-      "tools": [],
+      "tools": [
+        "file_read",
+        "file_write",
+        "file_list"
+      ],
       "description": "前台接待+调度中心，接需求/分发/收结果/报进度/防火墙"
     },
     {
@@ -32,7 +36,11 @@
         "task_decomposition",
         "phase_dispatch"
       ],
-      "tools": [],
+      "tools": [
+        "file_read",
+        "file_write",
+        "file_list"
+      ],
       "description": "产品教练+导师，需求发现三步走/教学/认知适配/调度开发团队Phase 0-3"
     },
     {
@@ -85,7 +93,11 @@
         "conflict_detection",
         "quality_assessment"
       ],
-      "tools": [],
+      "tools": [
+        "file_read",
+        "file_write",
+        "file_list"
+      ],
       "description": "内容质量审查，事实核查/逻辑验证/冲突检测"
     },
     {
@@ -100,7 +112,11 @@
         "reminder",
         "conflict_resolution"
       ],
-      "tools": [],
+      "tools": [
+        "file_read",
+        "file_write",
+        "file_list"
+      ],
       "description": "时间管理/提醒/日程冲突检测"
     },
     {
@@ -115,7 +131,11 @@
         "insight_extraction",
         "preference_memory"
       ],
-      "tools": [],
+      "tools": [
+        "file_read",
+        "file_write",
+        "file_list"
+      ],
       "description": "头脑风暴/方案设计/洞察提炼/偏好记忆"
     },
     {
@@ -130,7 +150,11 @@
         "localization",
         "quality_self_check"
       ],
-      "tools": [],
+      "tools": [
+        "file_read",
+        "file_write",
+        "file_list"
+      ],
       "description": "多语言翻译，术语库/翻译记忆/本地化"
     },
     {
@@ -145,7 +169,11 @@
         "ui_evaluation",
         "visual_description"
       ],
-      "tools": [],
+      "tools": [
+        "file_read",
+        "file_write",
+        "file_list"
+      ],
       "description": "图片分析/截图审查/UI评估，需要多模态模型"
     },
     {
@@ -279,7 +307,11 @@
         "conversation_export",
         "performance_analysis"
       ],
-      "tools": [],
+      "tools": [
+        "file_read",
+        "file_write",
+        "file_list"
+      ],
       "description": "角色元数据管理，审计/提示词优化/角色增删/对话导出/表现分析"
     },
     {
@@ -295,7 +327,11 @@
         "modification_dispatch",
         "backlog_tracking"
       ],
-      "tools": [],
+      "tools": [
+        "file_read",
+        "file_write",
+        "file_list"
+      ],
       "description": "项目接手员，只接已有项目。读代码/评估影响面/精准派单修改，与教练平行调度5人团队"
     },
     {
@@ -310,7 +346,11 @@
         "knowledge_freshness_audit",
         "memory_pruning"
       ],
-      "tools": [],
+      "tools": [
+        "file_read",
+        "file_write",
+        "file_list"
+      ],
       "description": "任务收尾后为被引用的经验打效用分，审计知识新鲜度，淘汰失效记忆"
     }
   ],
