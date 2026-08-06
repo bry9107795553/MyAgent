@@ -1,0 +1,55 @@
+{
+  "project": "MyAgent — AMD AI DevMaster Hackathon Track 2",
+  "date": "2026-08-06",
+  "time": "12:15",
+  "deadline": "2026-08-06 23:59",
+  "context_rounds": 46,
+  "mode": "coach",
+  "user_level": "小白",
+
+  "completed": {
+    "UI设计": "全新 Aurora 设计系统 — 专注向浅灰+暗色双主题，无气泡消息流，可折叠面板，拖拽手柄，右栏流水线/预览Tab切换，设置面板+模型切换，主题切换，5页面导航（对话/历史/工作组/阅览/工作台/皮肤/扩展）",
+    "前端同步": "App.vue 全局CSS变量+暗色主题+导航+设置面板；ChatView.vue 600+行重写；构建验证通过",
+    "对话优化": "代码块折叠(>15行)、HTML截断+预览按钮、思维链折叠显示、文件路径高亮",
+    "存储审计": "25路径全部贯通，修复data/outputs/缺失，atomic写入保证",
+    "向量检索": "all-MiniLM-L6-v2 可选增强，knowledge_base.py 混合检索，未安装自动降级关键词",
+    "角色审计": "19角色提示词+10工作组+7步流水线闭环验证，role-audit.md",
+    "测试方案": "10节40+checklist，test-plan.md",
+    "死代码清理": "删除SystemView.vue/notebooks/ppt hack脚本，router修复",
+    "文档整理": "QUICKSTART重写，删除过时模板，SUBMISSION.md对照官方要求",
+    "Git推送": "13次push，最新 eb754e3"
+  },
+
+  "pending": {
+    "P0_云端部署测试": "排队等云端实例，git pull + 构建 + 启动 + 按test-plan.md跑测试",
+    "P0_演示视频": "3-5分钟OBS录制，脚本在docs/演示视频分镜.md",
+    "P0_提交": "粘贴项目说明文档+仓库地址+视频链接+上传PPT"
+  },
+
+  "key_files": {
+    "入口": "QUICKSTART_CLOUD.md（云端速查）",
+    "架构": "docs/项目说明文档.md + PROJECT_SPEC.md",
+    "提交对照": "SUBMISSION.md",
+    "测试": "reports/test-plan.md",
+    "PPT": "ppt_competition/MyAgent_Competition.pptx",
+    "设计稿": "designs/chat-v2.html"
+  },
+
+  "decisions": [
+    "配色方案：专注向冷灰浅色 + 深蓝灰暗色，单蓝色强调 #5b5df0",
+    "消息展示：AI纯文字无气泡，用户浅色气泡在右侧",
+    "工作组：独立页面卡片网格，不在对话区顶部横栏",
+    "右栏：流水线和预览Tab切换，不是上下堆叠",
+    "面板：向左/右滑出收起，拖拽调整，手柄内含折叠按钮",
+    "模型：Qwen3-30B-A3B MoE云端，Qwen2.5-14B本地默认",
+    "向量检索：all-MiniLM-L6-v2可选，未安装降级关键词",
+    "部署：install.sh（预编译二进制）替代旧setup_amd_cloud.sh（源码编译）"
+  ],
+
+  "blockers": [
+    "云端实例排队中 — 未做实际运行测试",
+    "演示视频未录制"
+  ],
+
+  "nextAction": "云端实例到手后：1) git pull 2) 按QUICKSTART_CLOUD.md启动 3) 按test-plan.md逐项测试 4) 录视频 5) 提交"
+}
