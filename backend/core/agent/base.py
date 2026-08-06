@@ -185,6 +185,8 @@ class BaseAgent:
                 yield token
             self._append_history(user_message, "".join(full_response))
             self._last_dispatch = self._master.last_stream_dispatch
+            # 产物落盘钩子（修复：之前只在直接 LLM 路径调，master 派发路径漏了）
+            self._extract_and_save_artifacts("".join(full_response))
             return
 
         # 过渡模式 → 直接流式调用 LLM
@@ -291,18 +293,28 @@ class BaseAgent:
                 if line.strip():
                     content_lines.append(line)
             body = "\n".join(content_lines).strip()
+
+            # 如果当前回复没实质内容 → 往前翻对话历史找
+            if (not body or len(body) < 50) and hasattr(self, '_chat_history'):
+                for msg in reversed(self._chat_history):
+                    c = msg.get("content", "")
+                    if len(c) > 100 and msg.get("role") == "assistant":
+                        # 跳过只含"已保存"的短消息
+                        if "已保存" not in c[:50] and "保存至" not in c[:50]:
+                            body = c.strip()
+                            break
+
             if body and len(body) > 50:
                 target = Path(claimed_path)
                 if not target.is_absolute():
-                    target = Path(claimed_path)  # 保留为相对路径
+                    target = Path(claimed_path)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 try:
                     target.write_text(body, encoding="utf-8")
                     saved.append(str(target))
                 except Exception:
-                    # 路径无效 → 回退到 outputs/
                     fallback = outputs_dir / f"output_{ts}_claimed.txt"
-                    fallback.write_text(body, encoding="utf-8")
+                    fallback.write_text(body[:5000], encoding="utf-8")
                     saved.append(str(fallback))
 
         if saved:
