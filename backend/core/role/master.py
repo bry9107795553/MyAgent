@@ -315,6 +315,8 @@ class MasterRole(RoleBase):
             # Level 1: 自己干 — 问答、闲聊、简单任务
             task_id = generate_id("task")
             ctx = self._assemble_context(user_message, task_id, "")
+            # 立即给用户视觉反馈，避免「卡死」错觉
+            yield "[正在思考…] "
             full_response = []
             async for token in self._call_llm_stream(ctx):
                 full_response.append(token)
@@ -330,6 +332,7 @@ class MasterRole(RoleBase):
                 yield f"[已匹配 {len(detail)} 个角色: "
                 yield ", ".join(r["name"] for r in detail)
                 yield "] "
+                yield "[正在执行…] "
                 results = await self._dispatch_to_roles(user_message, detail)
                 if not results:
                     # 角色执行失败 → 降级走通用 LLM
