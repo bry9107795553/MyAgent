@@ -289,32 +289,34 @@ class MasterRole(RoleBase):
             pq = asyncio.Queue()
 
             async def _on_step(step_num, role_id, status, total, output):
-                await pq.put((f"\n\n__PIPE__{step_num}/{total} {role_id} {status}", output or ""))
+                await pq.put((
+                    f"\n\n__PIPE__{step_num}/{total} {role_id} {status}",
+                    role_id,
+                    output or ""
+                ))
 
             pipe_task = asyncio.ensure_future(
                 self._execute_pipeline(matched_wg, user_message, step_callback=_on_step)
             )
-            # 交错: 进度事件 + 角色输出优先 yield
             buf = ""
             while not pipe_task.done():
                 try:
-                    evt, output = await asyncio.wait_for(pq.get(), timeout=0.3)
+                    evt, rid, output = await asyncio.wait_for(pq.get(), timeout=0.3)
                     buf += evt
                     if output and len(output) > 0:
-                        preview = output if len(output) < 600 else output[:600] + "\n... (已截断)"
-                        buf += f"\n\n### 步骤 {role_id} 产出\n\n{preview}\n"
+                        preview = output if len(output) < 400 else output[:400] + "... (已截断)"
+                        buf += f"\n\n**{rid}:**\n{preview}\n"
                 except asyncio.TimeoutError:
                     if buf:
                         yield buf
                         buf = ""
                     continue
-            # 排空剩余进度
             while not pq.empty():
-                evt, output = pq.get_nowait()
+                evt, rid, output = pq.get_nowait()
                 buf += evt
                 if output and len(output) > 0:
-                    preview = output if len(output) < 600 else output[:600] + "\n... (已截断)"
-                    buf += f"\n\n### 步骤产出\n\n{preview}\n"
+                    preview = output if len(output) < 400 else output[:400] + "... (已截断)"
+                    buf += f"\n\n**{rid}:**\n{preview}\n"
             if buf:
                 yield buf
             # 等待任务完成取最终汇总（不输出完整 blob 到对话，避免重复）
