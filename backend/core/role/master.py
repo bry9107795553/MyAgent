@@ -318,6 +318,18 @@ class MasterRole(RoleBase):
                     yield token
             return
 
+        # 机械拆分失败 + 消息>30字 → 调用拆解员
+        if len(user_message) > 30:
+            yield "[拆解中…] "
+            decomposed = await self._decompose_task(user_message)
+            if decomposed and len(decomposed) > 1:
+                yield f"识别出 {len(decomposed)} 个子任务\n"
+                for i, task in enumerate(decomposed):
+                    yield f"\n── 子任务 {i+1}/{len(decomposed)} ──\n"
+                    async for token in self._dispatch_single(task):
+                        yield token
+                return
+
         async for token in self._dispatch_single(user_message):
             yield token
         return
@@ -450,6 +462,28 @@ class MasterRole(RoleBase):
             else:
                 merged.append(t)
         return merged if len(merged) > 1 else [message]
+
+    async def _decompose_task(self, message: str) -> list[str] | None:
+        """LLM拆解: 复杂消息拆为独立子任务列表，失败返回 None"""
+        try:
+            role = self._loaded_roles.get("decomposer")
+            if not role:
+                return None  # 拆解员未加载（首次启动后可用）
+            prompt = role.system_prompt or ""
+            ctx = role._assemble_context(
+                f"请拆解以下消息为独立子任务:\n{message}", "", ""
+            )
+            result = await role._call_llm(ctx)
+            # 提取 JSON 数组
+            m = re.search(r'\[[\s\S]*\]', result, re.DOTALL)
+            if m:
+                data = json.loads(m.group())
+                tasks = [item.get("task", "") for item in data if isinstance(item, dict)]
+                return tasks if len(tasks) > 1 else None
+            return None
+        except Exception as e:
+            print(f"[Master] 拆解员调用失败: {e}")
+            return None
 
     def _classify_task(self, message: str) -> tuple[int, object]:
         """
