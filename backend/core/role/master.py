@@ -306,6 +306,16 @@ class MasterRole(RoleBase):
         if self._pending_plan:
             self._pending_plan = {}
 
+        # 用户点击了"✅ 开始执行"按钮 → 启动 _pending_wg
+        if hasattr(self, '_pending_wg') and self._pending_wg and user_message.strip() == "开始执行":
+            pending = self._pending_wg
+            self._pending_wg = None
+            yield "开始执行 👇\n"
+            brief = self._build_brief("")
+            async for token in self._execute_workgroup_stream(pending["wg"], brief, pending["pipeline"]):
+                yield token
+            return
+
         # ── 多任务拆解: 按句号/换行切分 ──
         tasks = self._split_tasks(user_message)
         if len(tasks) > 1:
@@ -401,38 +411,26 @@ class MasterRole(RoleBase):
 
             response = "".join(full_response)
 
-            # 前台确认入口：用户说"确认" → 启动 _pending_wg
-            if hasattr(self, '_pending_wg') and self._pending_wg and self._is_confirmation(user_message):
-                pending = self._pending_wg
-                self._pending_wg = None
-                yield "好的，开始执行 👇\n"
-                brief = self._build_brief(user_message)
-                async for token in self._execute_workgroup_stream(pending["wg"], brief, pending["pipeline"]):
-                    yield token
-                self._record_task(user_message, response, generate_id("task"))
-                secretary.record_turn(user_message=user_message, role_response=response, role_id="master")
-                return
-
-            # 前台说了"确认/确认后/需要您确认" → 暂存等用户点头
-            if any(kw in response for kw in ["确认", "确认后", "需要您确认"]):
+            # 前台说了"开始执行"等触发词 → 启动
+            if not self._is_asking_question(response):
+                # LLM 没在提问 → 提供"开始执行"按钮
                 self._pending_wg = {"wg": matched_wg, "msg": user_message, "pipeline": pipeline}
+                yield ("[[OPTIONS]]" + json.dumps([{
+                    "id": "confirm_start", "label": "开始执行", "multi": False,
+                    "options": [{"label": "✅ 开始执行", "value": "开始执行"}]
+                }], ensure_ascii=False) + "[[/OPTIONS]]")
                 self._record_task(user_message, response, generate_id("task"))
                 return
 
-            # 前台说了"开始执行/启动团队"等触发词 → 启动流水线
-            if any(kw in response for kw in ["开始执行", "马上安排", "立刻安排", "直接开始", "开始行动", "立即安排", "启动团队", "可以开始", "现在开始"]):
-                yield "\n"
-                brief = self._build_brief(user_message)
-                async for token in self._execute_workgroup_stream(matched_wg, brief, pipeline):
-                    yield token
-
+            # LLM 在提问 → 等用户回答
             self._record_task(user_message, response, generate_id("task"))
             secretary.record_turn(user_message=user_message, role_response=response, role_id="master")
             return
 
-            self._record_task(user_message, response, generate_id("task"))
-            secretary.record_turn(user_message=user_message, role_response=response, role_id="master")
-            return
+    @staticmethod
+    def _is_asking_question(response: str) -> bool:
+        """判断 LLM 回复是否包含提问"""
+        return "？" in response or "?" in response
 
     def _build_brief(self, user_message: str) -> str:
         """从前台与用户的对话历史中编译简报，传给教练"""
