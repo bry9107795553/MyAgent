@@ -52,19 +52,9 @@ cd frontend && rm -rf dist && npx vite build && cp -r dist/* /var/www/myagent/
 
 ### ✅ 已完成
 
-**后端修复 (8项):**
-| 修复 | 文件 |
-|------|------|
-| 流式模式支持工具调用 | `role_base.py` |
-| web_search 接入L3知识库(非占位) | `search_tools.py` |
-| cleaner/deployer/designer/writer 授予工具 | `role_pool.json` |
-| 流水线 parallel_with 并行执行 | `master.py` |
-| coach 只做 Phase 0 (不自推进后续) | `coach/prompt.txt` |
-| tester/inspector 反幻觉约束 | `prompt.txt` |
-| 30B MoE 提取 reasoning_content | `gateway.py` + `role_base.py` |
-| 信息侦察员技能生成能力 | `knowledge_retriever/prompt.txt` + `tool_routes.py` |
+**后端修复 (8项):** 同上
 
-**前端修复 (10项):**
+**前端修复 (10+1项):**
 | 修复 |
 |------|
 | 皮肤切换 → CSS 变量 + localStorage 记忆 |
@@ -76,27 +66,30 @@ cd frontend && rm -rf dist && npx vite build && cp -r dist/* /var/www/myagent/
 | 消息气泡不溢出 + 浅色统一 |
 | 输入框上移 (padding 缩小) |
 | 气泡按内容宽度收缩 |
+| **🆕 全局CSS设计系统 → Linear+Claude风格 (2026-08-06 08:58)** |
 
-**架构清理:**
-- 删除 23 个过时文件/死代码 (旧的部署脚本、进度文档、domain/原型)
-- 产出 3 份分析报告 (`reports/`)
+**架构清理:** 23死文件 + 3报告
 
-### 🔴 当前阻塞
+### ✅ 最新完成：UI 设计同步 (2026-08-06)
 
-**UI 设计不满意**。最新版样图在 `designs/chat-preview.html`(Linear+Claude 风格)，需用户确认后同步到 ChatView.vue。当前云端跑的是中间版本，布局存在以下问题：
-- 工作组横栏在窄空间断行
-- 对话气泡风格不统一
-- 整体视觉不够精致
+`designs/chat-preview.html` 的 Linear+Claude 设计系统已同步到产品代码：
+
+| 改动 | 文件 | 说明 |
+|------|------|------|
+| 全局 CSS 变量升级 | `App.vue` | 13 个设计 token：`--accent` / `--bg-app` / `--bg-surface` / `--text-primary` 等 |
+| 聊天界面视觉重构 | `ChatView.vue` | 全部 500+ 行样式重写，统一使用 CSS 变量 |
+| 布局微调 | `ChatView.vue` | 左栏 280→260px，右栏 360→340px，消息居中 max-width 740px |
+| 构建验证 | `frontend/` | ✅ vite build 通过，54 模块，零错误 |
 
 ### 🔴 待完成（今晚）
 
-| 优先级 | 任务 |
-|:--:|------|
-| 🔴 | **确认 UI 样图 → 同步 ChatView.vue → 部署** |
-| 🔴 | **录制演示视频**（3-5分钟 OBS） |
-| 🔴 | **Fork + PR 提交** |
-| 🟡 | 全功能验收测试 |
-| 🟢 | README 完善 + 最终 push |
+| 优先级 | 任务 | 说明 |
+|:--:|------|------|
+| 🔴 | **部署到云端** | 在云服务器执行更新命令（见下方） |
+| 🔴 | **录制演示视频** | 3-5分钟 OBS，按演示脚本录 |
+| 🔴 | **Fork + PR 提交** | GitHub 操作 |
+| 🟡 | 全功能验收测试 | 部署后测试关键流程 |
+| 🟢 | 最终 push | `git push origin main` |
 
 ---
 
