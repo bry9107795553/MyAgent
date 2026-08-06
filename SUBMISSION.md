@@ -1,46 +1,79 @@
-# 提交文件清单
+# 比赛提交包 — 对照官方要求
 
-> 评审 clone 后，以下文件最重要。其余为开发过程产物，不影响运行。
+> 赛道二 · 2026 AMD AI DevMaster Hackathon
+> 提交截止：2026-08-06 23:59
 
 ---
 
-## 🔴 必读（评委第一眼）
+## 一、项目说明文档
 
-| 文件 | 内容 |
-|------|------|
-| `README.md` | 项目介绍 + 一句话 QuickStart |
-| `PROJECT_SPEC.md` | 技术规格说明 |
-| `QUICKSTART_CLOUD.md` | 云端部署速查表（上机照做） |
-| `docs/项目说明文档.md` | 中文项目说明书 |
-| `docs/PROJECT_DOCUMENTATION.md` | 英文技术文档 |
+**📄 主文件：`docs/项目说明文档.md`**  
+**📄 英文版：`docs/PROJECT_DOCUMENTATION.md`**
 
-## 🔵 辅助材料
+| 官方要求 | 对应章节 | 状态 |
+|---------|---------|:---:|
+| 应用场景 | 二、应用场景 — 软件开发 / 知识工作 / 个人效率 / 离线环境 | ✅ |
+| Agent 架构图 | 三、Agent 架构 — 四层架构图 + 19 角色表 + 10 工作组 | ✅ |
+| 核心能力介绍 | 四、核心能力 — 自然语言创建 Agent / 4级记忆 / 动态调度 / 工具调用 / 项目状态 / 目录隔离 / 经验系统 | ✅ |
+| 模型介绍与本地部署方案 | 五、模型与本地部署 — 模型表 + 单卡部署架构 + 100% 本地审计 | ✅ |
+| AMD GPU 推理速度优化 | 六、推理速度优化 — HIPBLAS / GQA / K-quant / 多GPU / A/B测速 | ✅ |
 
-| 文件 | 内容 |
-|------|------|
-| `docs/提交指南.md` | 提交前自检清单 |
-| `docs/演示视频分镜.md` | 录屏脚本 |
-| `ppt_competition/` | 路演 PPT |
-| `reports/test-plan.md` | 测试方案 |
-| `reports/role-audit.md` | 19 角色审计 |
+> 提交时把 `docs/项目说明文档.md` 全文粘贴或上传。
 
-## 🟢 运行必需
+---
+
+## 二、项目源代码
+
+| 官方要求 | 文件 | 状态 |
+|---------|------|:---:|
+| 完整源代码 | 仓库 `github.com/bry9107795553/MyAgent` | ✅ |
+| README（环境配置+启动指南+依赖） | `README.md` — QuickStart 6 步 + 架构图 | ✅ |
+| 依赖列表 | `backend/requirements.txt` — 6 个核心依赖 | ✅ |
+| 一键部署 | `install.sh` — 自动装 llma.cpp + 模型 + 前端 | ✅ |
+| 一键启动 | `start.sh` — 自愈启动三个服务 | ✅ |
+
+> 提交仓库地址即可。
+
+---
+
+## 三、演示视频
+
+**📄 脚本：`docs/演示视频分镜.md`**
+
+| 镜头 | 时长 | 内容 |
+|------|:---:|------|
+| 1. 硬件亮相 | 15s | `rocminfo` + `rocm-smi` 证明跑在 W7900 上 |
+| 2. 单轮问答 | 30s | "你好" → GPU 占用拉满 → 证明本地推理 |
+| 3. 多角色流水线 | 60s | "开发一个待办事项" → 7 角色依次执行 |
+| 4. 经验系统 | 90s | 投毒演示 — 记忆自愈 |
+| 5. 速度对比 | 30s | A/B prompt 测速结果 |
+
+> 录完上传到视频平台，提交链接。
+
+---
+
+## 四、补充材料 — PPT
+
+**📄 文件：`ppt_competition/MyAgent_Competition.pptx`**  
+**📄 设计说明：`ppt_competition/DESIGN.md`**
+
+幻灯片结构（`ppt_competition/STORY.md`）：
+1. 封面 — MyAgent 品牌
+2. 痛点 — 隐私 + 数据主权
+3. 方案 — 全本地 19 角色 Agent 平台
+4. 架构 — 四层架构图
+5. 核心能力 — 5 项全中
+6. 演示 — AMD W7900 实际运行截图
+7. 速度优化 — HIPBLAS + GQA + A/B 测速
+8. 总结 — 为什么选我们
+
+---
+
+## 提交清单（照此核对）
 
 ```
-backend/  frontend/  data/
-install.sh  start.sh  stop.sh  switch_model.sh
-nginx.conf  backend/requirements.txt  backend/.env.template
+□ 1. 项目说明文档 → 粘贴 docs/项目说明文档.md
+□ 2. 仓库地址   → https://github.com/bry9107795553/MyAgent
+□ 3. 演示视频   → 上传后填链接（3-5分钟）
+□ 4. PPT        → 上传 ppt_competition/MyAgent_Competition.pptx
 ```
-
-## ⚪ 内部文档（不需提交给评委）
-
-| 文件 | 说明 |
-|------|------|
-| `HANDOFF.md` | 团队内部移交摘要 |
-| `reports/storage-audit.md` | 存储链路审计 |
-| `reports/architecture-audit.md` | 架构审计 |
-| `reports/backend-chain-analysis.md` | 调用链分析 |
-| `reports/retrieval-upgrade.md` | 未来优化建议 |
-| `designs/chat-v2.html` | UI 设计草稿 |
-| `.workbuddy/` | 本地开发工具 |
-| `tests/` | 开发者测试 |
