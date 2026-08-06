@@ -111,7 +111,7 @@
             </div>
           </div>
           <div class="preview-body">
-            <iframe v-if="previewMode === 'web' && htmlContent" class="preview-iframe" :srcdoc="htmlContent" sandbox="allow-scripts"/>
+            <iframe v-if="previewMode === 'web' && htmlContent" class="preview-iframe" :srcdoc="htmlContent" sandbox="allow-scripts"></iframe>
             <div v-else-if="previewMode === 'web'" class="preview-empty"><div class="preview-empty-icon">⊞</div>产物将在此预览<br><span style="font-size:11px;margin-top:4px">HTML / 报告 / 图片</span></div>
             <pre v-else-if="previewMode === 'code'" class="preview-code">{{ htmlContent || '暂无源码' }}</pre>
             <div v-else class="file-list">
