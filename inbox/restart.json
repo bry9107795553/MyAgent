@@ -1,7 +1,7 @@
 {
   "project": "MyAgent — AMD AI DevMaster Hackathon Track 2",
   "date": "2026-08-06",
-  "time": "14:40",
+  "time": "14:55",
   "deadline": "2026-08-06 23:59",
   "mode": "coach",
   "user_level": "小白",
@@ -10,34 +10,28 @@
     "host": "u-3004-abffcef6",
     "path": "/workspace/template-repos/template-2603/repo",
     "public_url": "https://rc-53833487fc7b93ab.radeon.firstdg.ai",
-    "status": "running — 服务正常，但有 bug 待修"
+    "status": "不可达 — 公网URL返回404，需在云端控制台重新启动"
   },
 
   "completed": {
-    "原始工作": "19角色/10工作组/四级记忆/Aurora UI/PPT/项目文档/海报/解说词",
-    "start.sh改进": "自动安装rc-tunnel并打印公网URL",
-    "generator.py bug": "generate_id/now_iso 缺失导入已修复",
-    "UI描述修正": "三视图→七视图导航",
-    "B1流水线面板": "后端每步推__PIPE__事件，前端实时更新面板",
-    "对话区不泄漏标记": "前端正则剥离__PIPE__完整标记",
-    "对话区显示角色产出": "每步after完成输出400字预览",
-    "不再重复输出blob": "末尾不再yield完整流水线结果",
-    "CTX_SIZE": "已改为16384",
-    "extractHtml严格化": "只接受含html代码块或完整HTML片段"
+    "B3记忆修复": "master.py dispatch_stream/_handle_general/_handle_greeting 全部添加 _record_task 调用，代码已推送到 GitHub",
+    "部署脚本": "deploy_and_test.sh 已创建 — 云端粘贴即可一键部署+验证B1/B2/B3+跑S7测速"
   },
 
   "current_bugs": {
-    "B1流水线进度": "已修，待验证（上次因NameError+CTX超限没跑到）",
+    "B1流水线进度": "已修，待验证",
     "B2HTML预览": "已严格化extractHtml，待验证",
-    "B3多轮记忆丢失": "未修 — 对话区'我叫张三'确认后下一轮问'我叫什么'答不知道",
+    "B3多轮记忆丢失": "已修 — dispatch_stream/通用对话路径遗漏 _record_task，已补全",
     "B4知识检索失败": "未修 — 低优先级，演示可跳过"
   },
 
   "pending": {
-    "P0_验证B1": "云端部署后发'开发一个网页版计算器'，观察面板逐角色亮起+对话流",
-    "P0_修复B3": "后端记忆注入/持久化排查",
-    "P0_S7测速": "跑bench_helpers.sh A/B测速",
-    "P0_演示视频": "按docs/演示解说词.md录制",
+    "P0_云端部署": "登录 AMD 云端控制台 → SSH 进实例 → bash deploy_and_test.sh",
+    "P0_验证B1": "观察流水线面板逐角色亮起 + __PIPE__ 标记数",
+    "P0_验证B2": "检查预览 Tab 是否有 HTML 页面",
+    "P0_验证B3": "先问'我叫张三'再问'我叫什么'确认记忆保留",
+    "P0_S7测速": "deploy_and_test.sh 自动跑 A/B 组各2次",
+    "P0_演示视频": "按 docs/演示解说词.md 录制7镜头",
     "P0_提交": "粘贴项目说明文档+仓库链接+视频+PPT"
   },
 
@@ -45,8 +39,9 @@
     "14B模型够用，不换30B",
     "start.sh已自动装rc-tunnel",
     "CTX_SIZE=16384（多角色prompt需要）",
-    "extractHtml只接HTML代码块，不接markdown"
+    "extractHtml只接HTML代码块，不接markdown",
+    "B3根因: dispatch_stream 绕过 execute_stream 直接调 _call_llm_stream，遗漏 _record_task"
   ],
 
-  "nextAction": "1) 部署最新代码 → 2) 验证B1+B2 → 3) 修B3记忆 → 4) 跑S7测速 → 5) 录视频"
+  "nextAction": "SSH登录云端实例 → cd /workspace/template-repos/template-2603/repo → bash deploy_and_test.sh → 验证结果 → 录视频 → 提交"
 }

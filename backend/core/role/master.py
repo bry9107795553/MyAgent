@@ -304,7 +304,11 @@ class MasterRole(RoleBase):
                     evt, rid, output = await asyncio.wait_for(pq.get(), timeout=0.3)
                     buf += evt
                     if output and len(output) > 0:
-                        preview = output if len(output) < 400 else output[:400] + "... (已截断)"
+                        # 短输出直接显示，长代码用 <details> 折叠（前端 marked 原生支持）
+                        if len(output) > 800:
+                            preview = f"<details><summary>📄 {rid} 完整产出 ({len(output)} 字符) — 点击展开</summary>\n\n{output}\n\n</details>"
+                        else:
+                            preview = output
                         buf += f"\n\n**{rid}:**\n{preview}\n"
                 except asyncio.TimeoutError:
                     if buf:
@@ -315,7 +319,10 @@ class MasterRole(RoleBase):
                 evt, rid, output = pq.get_nowait()
                 buf += evt
                 if output and len(output) > 0:
-                    preview = output if len(output) < 400 else output[:400] + "... (已截断)"
+                    if len(output) > 800:
+                        preview = f"<details><summary>📄 {rid} 完整产出 ({len(output)} 字符) — 点击展开</summary>\n\n{output}\n\n</details>"
+                    else:
+                        preview = output
                     buf += f"\n\n**{rid}:**\n{preview}\n"
             if buf:
                 yield buf
