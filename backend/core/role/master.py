@@ -278,7 +278,7 @@ class MasterRole(RoleBase):
         :yield: 进度 token
         """
         self._last_stream_dispatch = {"type": "direct", "workgroup": None, "roles_used": []}
-        yield "[分析中...] "
+        yield "[前台] "
 
         if self._is_simple_greeting(user_message):
             async for chunk in self._stream_greeting(user_message):

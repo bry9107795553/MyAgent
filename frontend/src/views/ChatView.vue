@@ -408,7 +408,7 @@ onMounted(() => {
   refreshConversationList()
   const convs = loadFromStorage()
   if (convs.length > 0 && !currentConversation.value) loadConversation(convs[0])
-  initCodeFolding()
+  initCodeFolding(); refreshFiles()
 })
 </script>
 
