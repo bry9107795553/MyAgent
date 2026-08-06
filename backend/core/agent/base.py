@@ -201,6 +201,8 @@ class BaseAgent:
 
         self._append_history(user_message, "".join(full_response))
         self._last_dispatch = {"type": "direct", "workgroup": None, "roles_used": []}
+        # 钩子：自动落盘回复里的 Markdown / HTML 产物
+        self._extract_and_save_artifacts("".join(full_response))
 
     # ------------------------------------------------------------------ #
     # 记忆管理 (过渡实现 — 简单 JSON 文件)
@@ -230,3 +232,57 @@ class BaseAgent:
             with open(history_path, "r", encoding="utf-8") as f:
                 self._chat_history = json.load(f)
             print(f"[Agent] 恢复记忆: {len(self._chat_history)} 条消息")
+
+    # ------------------------------------------------------------------ #
+    # 产物自动落盘：把对话里的 Markdown / HTML 大块内容写到 data/outputs/
+    # ------------------------------------------------------------------ #
+
+    def _extract_and_save_artifacts(self, text: str):
+        """
+        自动从回复中提取 Markdown / HTML 代码块，保存到 data/outputs/。
+        前端预览面板会列出这些文件。
+        """
+        import re
+        from pathlib import Path
+        from datetime import datetime
+        from core.memory.store import now_iso
+
+        outputs_dir = Path("data/outputs")
+        outputs_dir.mkdir(parents=True, exist_ok=True)
+
+        # 匹配 Markdown 代码块：```lang\n...\n``` 或 ```\n...\n```
+        code_blocks = re.findall(r'```(\w*)\n([\s\S]*?)\n```', text)
+        saved = []
+        ts = datetime.now().strftime("%H%M%S")
+        for i, (lang, body) in enumerate(code_blocks, 1):
+            if len(body) < 200:  # 太短的不算产物（避免误存代码片段）
+                continue
+            # 推断文件后缀
+            ext_map = {"markdown": "md", "md": "md", "html": "html", "htm": "html",
+                       "python": "py", "javascript": "js", "typescript": "ts",
+                       "json": "json", "yaml": "yml", "shell": "sh", "bash": "sh",
+                       "css": "css", "scss": "scss"}
+            ext = ext_map.get(lang.lower(), lang.lower() if lang else "txt")
+            # 文件名：时间戳 + 序号 + 后缀
+            filename = f"output_{ts}_{i}.{ext}"
+            target = outputs_dir / filename
+            try:
+                target.write_text(body, encoding="utf-8")
+                saved.append(str(target))
+            except Exception as e:
+                print(f"[Agent] 产物落盘失败: {e}")
+
+        # 也检测大段 HTML（无代码块包裹的 <!DOCTYPE><html>...</html>）
+        if not saved:
+            html_match = re.search(r'<!DOCTYPE[\s\S]*?</html>', text, re.IGNORECASE)
+            if html_match and len(html_match.group()) > 500:
+                filename = f"output_{ts}_html.html"
+                target = outputs_dir / filename
+                try:
+                    target.write_text(html_match.group(), encoding="utf-8")
+                    saved.append(str(target))
+                except Exception:
+                    pass
+
+        if saved:
+            print(f"[Agent] 自动落盘 {len(saved)} 个产物: {saved}")
