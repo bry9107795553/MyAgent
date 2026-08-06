@@ -394,7 +394,7 @@ class MasterRole(RoleBase):
             }
             ctx = self._assemble_context(
                 f"用户说：{user_message}\n\n匹配到了「{wg_name}」工作组。"
-                f"作为前台：需求模糊就先问清楚，需求明确就说'好的，我让教练来分析，请稍等'。",
+                f"作为前台：最多问 1 个最关键的问题，然后立刻说'好的，我让教练来分析，请稍等'。教练会进一步了解细节。",
                 generate_id("task"), ""
             )
             full_response = []
