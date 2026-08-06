@@ -306,17 +306,6 @@ class MasterRole(RoleBase):
         if self._pending_plan:
             self._pending_plan = {}
 
-        # 前台确认入口：用户说"确认/开始/好的" → 启动待确认工作组
-        if hasattr(self, '_pending_wg') and self._pending_wg and self._is_confirmation(user_message):
-            print(f"[Master] _pending_wg 触发: wg={self._pending_wg['wg'].get('name')}")
-            pending = self._pending_wg
-            self._pending_wg = None
-            yield "好的，开始执行 👇\n"
-            brief = self._build_brief(user_message)
-            async for token in self._execute_workgroup_stream(pending["wg"], brief, pending["pipeline"]):
-                yield token
-            return
-
         # ── 多任务拆解: 按句号/换行切分 ──
         tasks = self._split_tasks(user_message)
         if len(tasks) > 1:
@@ -386,49 +375,21 @@ class MasterRole(RoleBase):
                 return
 
         else:  # level == 3
-            # Level 3: 组团干 — 让前台 LLM 先和用户对话，确认需求
+            # Level 3: 组团干 — 直接启动流水线
             matched_wg = detail
             pipeline = matched_wg.get("pipeline", [])
-            wg_name = matched_wg.get("name", "工作组")
-
-            # 让前台 LLM 自由回应：先告诉用户谁来处理，再确认或追问
             wg_id = matched_wg.get("id", "")
             self._last_stream_dispatch = {
                 "type": "workgroup",
                 "workgroup": matched_wg.get("name", wg_id),
                 "roles_used": matched_wg.get("members", []),
             }
-            ctx = self._assemble_context(
-                f"用户说：{user_message}\n\n匹配到了「{wg_name}」工作组。"
-                f"5个核心信息(用途/功能/风格/平台/时间)：用户说了几个就少问几个。全都说了直接回复'开始执行'启动团队。",
-                generate_id("task"), ""
-            )
-            full_response = []
-            async for token in self._call_llm_stream(ctx):
-                full_response.append(token)
+            print(f"[Master] Level 3 启动流水线: {matched_wg.get('name', wg_id)}")
+            yield "好的，开始执行 👇\n"
+            brief = self._build_brief(user_message)
+            async for token in self._execute_workgroup_stream(matched_wg, brief, pipeline):
                 yield token
-
-            response = "".join(full_response)
-
-            # 前台问了"确认"类的词 → 暂存上下文，等用户点头
-            if any(kw in response for kw in ["确认", "确认后", "需要您确认"]):
-                print(f"[Master] 保存 _pending_wg: wg={wg_name}")
-                self._pending_wg = {"wg": matched_wg, "msg": user_message, "pipeline": pipeline}
-                self._record_task(user_message, response, generate_id("task"))
-                return
-
-            trigger_matched = any(kw in response for kw in ["开始执行", "马上安排", "立刻安排", "直接开始", "开始行动", "立即安排", "启动团队", "开始了", "可以开始", "现在开始"])
-            # 如果 LLM 没问问题（无 "？") 且有足够上下文 → 自动派发
-            if not trigger_matched and "？" not in response:
-                brief = self._build_brief(user_message)
-                if brief.count("用户答") >= 2 or brief.count("前台问") >= 2:
-                    trigger_matched = True
-
-            if trigger_matched:
-                yield "\n"
-                brief = self._build_brief(user_message)
-                async for token in self._execute_workgroup_stream(matched_wg, brief, pipeline):
-                    yield token
+            return
 
             self._record_task(user_message, response, generate_id("task"))
             secretary.record_turn(user_message=user_message, role_response=response, role_id="master")
