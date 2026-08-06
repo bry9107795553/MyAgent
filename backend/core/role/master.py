@@ -424,6 +424,13 @@ class MasterRole(RoleBase):
             r = self._role_pool.get("knowledge_retriever")
             if r: return (2, [r])
 
+        # 文件阅读/分析 → knowledge_retriever（比 master 自己读快，prompt 专精文件解析）
+        has_file_read = any(k in msg for k in ["读", "读取", "查看", "看看", "看", "告诉我", "解释"])
+        has_file_name = bool(re.search(r'[\w./-]+\.[\w]{2,5}', msg))
+        if has_file_read and has_file_name:
+            r = self._role_pool.get("knowledge_retriever")
+            if r: return (2, [r])
+
         # 简单写作（≤30字 且不含"报告/详细/多篇"）
         if any(k in msg for k in ["写", "写作", "文章", "邮件", "文案"]):
             if len(msg) <= 30 and not any(k in msg for k in ["报告", "详细", "多篇"]):
