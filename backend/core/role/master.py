@@ -394,23 +394,17 @@ class MasterRole(RoleBase):
             wg_id = matched_wg.get("id", "")
             pipeline = matched_wg.get("pipeline", [])
 
-            # Plan-First: 开发类 → 模糊需求展示计划，明确需求直接执行
+            # Plan-First: 开发类 → 展示计划，用户确认后执行
             if matched_wg.get("conditions", {}).get("auto_approve") and wg_id.startswith("dev_"):
-                # 开发类只看有没有"开发/做/建 + 实体"动词
-                is_specific = bool(re.search(r'(开发|做|建|搭|创建|实现|写)', user_message)) and len(user_message.strip()) >= 8 and not re.search(r'[？?吗呃吧呢]$', user_message)
-
-                if not is_specific:
-                    plan = self._build_execution_plan(matched_wg, user_message)
-                    self._pending_plan = {"wg": matched_wg, "msg": user_message, "pipeline": pipeline}
-                    self._last_stream_dispatch = {
-                        "type": "workgroup",
-                        "workgroup": matched_wg.get("name", wg_id),
-                        "roles_used": matched_wg.get("members", []),
-                    }
-                    yield plan
-                    return
-                # 需求明确，直接执行
-                yield "好的，开始执行 👇\n"
+                plan = self._build_execution_plan(matched_wg, user_message)
+                self._pending_plan = {"wg": matched_wg, "msg": user_message, "pipeline": pipeline}
+                self._last_stream_dispatch = {
+                    "type": "workgroup",
+                    "workgroup": matched_wg.get("name", wg_id),
+                    "roles_used": matched_wg.get("members", []),
+                }
+                yield plan
+                return
 
             # 模糊度守卫
             text, options = self._check_vague_request(user_message, matched_wg)
