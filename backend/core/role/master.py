@@ -282,9 +282,10 @@ class MasterRole(RoleBase):
 
     async def dispatch_stream(self, user_message: str) -> AsyncGenerator[str, None]:
         """
-        流式调度 (向用户实时反馈调度进度 + 逐 token 推送)
-
-        :yield: 进度 token
+        流式调度 — 三级分流
+        Level 1: 自己干（闲聊/问答/简单任务）
+        Level 2: 派一个人干（专业任务但单步即可）
+        Level 3: 组团干（多角色协作流水线）
         """
         self._last_stream_dispatch = {"type": "direct", "workgroup": None, "roles_used": []}
         yield "[前台] "
@@ -294,7 +295,7 @@ class MasterRole(RoleBase):
                 yield chunk
             return
 
-        # Plan-First 确认检查（提前到工作组匹配之前，避免"好的"不匹配任何工作组时被跳过）
+        # Plan-First 确认检查
         if self._pending_plan and self._is_confirmation(user_message):
             pending = self._pending_plan
             self._pending_plan = {}
@@ -303,32 +304,62 @@ class MasterRole(RoleBase):
                 yield token
             return
 
-        # 用户有不同的想法 → 清除待确认计划
         if self._pending_plan:
             self._pending_plan = {}
 
-        # 尝试匹配预设工作组
-        # 澄清/缩小需求 → 跳过工作组匹配
-        import re
-        is_clarification = bool(re.search(r'^(我?只想|我就|仅仅|不过是)\S', user_message.strip()))
-        matched_wg = None if is_clarification else self._match_workgroup(user_message)
+        # ── 三级分流 ──
+        level, detail = self._classify_task(user_message)
 
-        # 尝试匹配预设工作组
-        matched_wg = self._match_workgroup(user_message)
-        if matched_wg:
-            wg_id = matched_wg.get("id", "")
+        if level == 1:
+            # Level 1: 自己干 — 问答、闲聊、简单任务
+            task_id = generate_id("task")
+            ctx = self._assemble_context(user_message, task_id, "")
+            full_response = []
+            async for token in self._call_llm_stream(ctx):
+                full_response.append(token)
+                yield token
+            self._record_task(user_message, "".join(full_response), task_id)
+            return
 
-            # 模糊度守卫: 需求太宽泛时先问清楚再动手（流式反问 + 选项）
-            text, options = self._check_vague_request(user_message, matched_wg)
-            if text:
-                async for chunk in self._stream_text(text, chunk_size=3, delay=0.02):
-                    yield chunk
-                if options:
-                    yield ("[[OPTIONS]]" + json.dumps(options, ensure_ascii=False) + "[[/OPTIONS]]")
+        elif level == 2:
+            # Level 2: 派一个人干 — 翻译、简单写作、知识检索
+            if detail:  # detail = matched role list
+                self._last_stream_dispatch = {"type": "roles", "workgroup": None, "roles_used": [r["id"] for r in detail]}
+                yield f"[已匹配 {len(detail)} 个角色: "
+                yield ", ".join(r["name"] for r in detail)
+                yield "] "
+                results = await self._dispatch_to_roles(user_message, detail)
+                if not results:
+                    # 角色执行失败 → 降级走通用 LLM
+                    task_id = generate_id("task")
+                    ctx = self._assemble_context(user_message, task_id, "")
+                    full_response = []
+                    async for token in self._call_llm_stream(ctx):
+                        full_response.append(token)
+                        yield token
+                    self._record_task(user_message, "".join(full_response), task_id)
+                    return
+                content = self._aggregate_results(user_message, results)
+                yield content
+                return
+            else:
+                # 没有匹配到具体角色 → 降级 Level 1
+                task_id = generate_id("task")
+                ctx = self._assemble_context(user_message, task_id, "")
+                full_response = []
+                async for token in self._call_llm_stream(ctx):
+                    full_response.append(token)
+                    yield token
+                self._record_task(user_message, "".join(full_response), task_id)
                 return
 
-            # Plan-First: 开发类工作组 → 先展示计划，确认后再执行
+        else:  # level == 3
+            # Level 3: 组团干 — 开发流水线或复杂工作组
+            matched_wg = detail  # detail = matched workgroup
+            wg_id = matched_wg.get("id", "")
             pipeline = matched_wg.get("pipeline", [])
+
+            # Plan-First: 开发类 → 展示计划
             if matched_wg.get("conditions", {}).get("auto_approve") and wg_id.startswith("dev_"):
                 plan = self._build_execution_plan(matched_wg, user_message)
                 self._pending_plan = {"wg": matched_wg, "msg": user_message, "pipeline": pipeline}
@@ -340,51 +371,70 @@ class MasterRole(RoleBase):
                 yield plan
                 return
 
-            # 非开发类工作组 → 直接执行（翻译、写作等简单任务）
+            # 模糊度守卫
+            text, options = self._check_vague_request(user_message, matched_wg)
+            if text:
+                async for chunk in self._stream_text(text, chunk_size=3, delay=0.02):
+                    yield chunk
+                if options:
+                    yield ("[[OPTIONS]]" + json.dumps(options, ensure_ascii=False) + "[[/OPTIONS]]")
+                return
+
+            # 复杂工作组 → 直接执行
             async for token in self._execute_workgroup_stream(matched_wg, user_message, pipeline):
                 yield token
             return
 
-        # 关键词匹配角色
-        matched_roles = self._keyword_match_roles(user_message)
-        if matched_roles:
-            self._last_stream_dispatch = {
-                "type": "roles",
-                "workgroup": None,
-                "roles_used": [r["id"] for r in matched_roles],
-            }
-            yield f"[已匹配 {len(matched_roles)} 个角色: "
-            yield ", ".join(r["name"] for r in matched_roles)
-            yield "] "
-            # 多角色也需要完整输出 → 非流式
-            results = await self._dispatch_to_roles(user_message, matched_roles)
-            if not results:
-                # 角色执行失败 → 降级走通用 LLM 流式处理，不要弹错误
-                task_id = generate_id("task")
-                ctx = self._assemble_context(user_message, task_id, "")
-                full_response = []
-                async for token in self._call_llm_stream(ctx):
-                    full_response.append(token)
-                    yield token
-                self._record_task(user_message, "".join(full_response), task_id)
-                return
-            content = self._aggregate_results(user_message, results)
-            yield content
-            return
+    # ── 三级分流 ──
 
-        # 通用处理 → 真正逐 token 流式
-        task_id = generate_id("task")
-        ctx = self._assemble_context(user_message, task_id, "")
-        full_response = []
-        async for token in self._call_llm_stream(ctx):
-            full_response.append(token)
-            yield token
-        # 记录到工作记忆 (B3 修复: dispatch_stream 需显式调用 _record_task)
-        self._record_task(user_message, "".join(full_response), task_id)
+    def _classify_task(self, message: str) -> tuple[int, object]:
+        """
+        Level 1: 自己干 | Level 2: 派一个人 | Level 3: 组团干
+        :return: (level, detail) — detail 在 L2=角色列表, L3=工作组, L1=None
+        """
+        msg = message.strip()
+        import re
+
+        # ── Level 3: 多步骤开发/创建任务 ──
+        has_project_verb = any(v in msg for v in ["开发", "做项目", "做一个", "实现一个", "开发个",
+                                                    "做个网页", "做个网站", "搭一个项目", "创建项目",
+                                                    "前端页面开发", "静态页面制作", "开发一个", "建一个网站"])
+        if has_project_verb and len(msg) >= 6:
+            wg = self._match_workgroup(message)
+            if wg: return (3, wg)
+
+        # 含"报告/详细分析/长文" + 足够长 → 工作组
+        if any(k in msg for k in ["报告", "分析报告", "详细分析", "长文"]) and len(msg) > 20:
+            wg = self._match_workgroup(message)
+            if wg: return (3, wg)
+
+        # ── Level 2: 单角色专业任务 ──
+        # 翻译
+        if any(k in msg for k in ["翻译"]):
+            r = self._role_pool.get("translator")
+            if r and len(msg) < 200: return (2, [r])
+
+        # 知识检索
+        if any(k in msg for k in ["搜索", "查资料", "检索", "找文档"]):
+            r = self._role_pool.get("knowledge_retriever")
+            if r: return (2, [r])
+
+        # 简单写作（≤30字 且不含"报告/详细/多篇"）
+        if any(k in msg for k in ["写", "写作", "文章", "邮件", "文案"]):
+            if len(msg) <= 30 and not any(k in msg for k in ["报告", "详细", "多篇"]):
+                r = self._role_pool.get("writer")
+                if r: return (2, [r])
+
+        # 审查/检查 → quality_checker
+        if any(k in msg for k in ["审查", "检查", "验证"]):
+            match = self._keyword_match_roles(message)
+            if match: return (2, match)
+
+        # ── Level 1 兜底: 自己干 ──
+        return (1, None)
 
     @property
     def last_stream_dispatch(self) -> dict:
-        """最近一次流式调度使用的工作组 / 角色信息"""
         return getattr(self, "_last_stream_dispatch", None) or {
             "type": "direct", "workgroup": None, "roles_used": [],
         }
