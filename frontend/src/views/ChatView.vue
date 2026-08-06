@@ -281,22 +281,21 @@ async function send() {
     const d = JSON.parse(e.data)
     if (d.type === 'stream_token') {
       const raw = d.content
-      // 检测流水线进度标记 __PIPE__step/total role status
-      const pipeMatch = raw.match(/__PIPE__(\d+)\/(\d+)\s+(\S+)\s+(done|error)/g)
-      if (pipeMatch) {
-        for (const pm of pipeMatch) {
-          const m = pm.match(/__PIPE__(\d+)\/(\d+)\s+(\S+)\s+(done|error)/)
-          if (m) {
-            const step = parseInt(m[1]), total = parseInt(m[2]), role = m[3], st = m[4]
-            if (pipelineSteps.value.length === 0 || pipelineSteps.value.length !== total) {
-              pipelineSteps.value = Array.from({ length: total }, (_, i) => ({ role: `步骤${i+1}`, s: 'pending', output: '' }))
-            }
-            pipelineSteps.value[step - 1] = { role, s: st === 'error' ? 'error' : 'done', output: '' }
-            if (st === 'done') scroll()
+      // 检测流水线进度标记 __PIPE__step/total role done|error
+      const pipeRegex = /__PIPE__\d+\/\d+\s+\S+\s+(?:done|error)/g
+      const hasPipe = pipeRegex.test(raw)
+      if (hasPipe) {
+        const matches = [...raw.matchAll(/__PIPE__(\d+)\/(\d+)\s+(\S+)\s+(done|error)/g)]
+        for (const m of matches) {
+          const step = parseInt(m[1]), total = parseInt(m[2]), role = m[3], st = m[4]
+          if (pipelineSteps.value.length === 0 || pipelineSteps.value.length !== total) {
+            pipelineSteps.value = Array.from({ length: total }, (_, i) => ({ role: `步骤${i+1}`, s: 'pending', output: '' }))
           }
+          pipelineSteps.value[step - 1] = { role, s: st === 'error' ? 'error' : 'done', output: '' }
+          if (st === 'done') scroll()
         }
-        // 滤掉 __PIPE__ 标记，不显示在对话里
-        const clean = raw.replace(/__PIPE__\S+/g, '').trim()
+        // 滤掉完整的 __PIPE__ 标记（含角色名+状态），不显示在对话里
+        const clean = raw.replace(/__PIPE__\d+\/\d+\s+\S+\s+(?:done|error)/g, '').trim()
         if (clean) { buf.value += clean; scroll() }
       } else {
         buf.value += raw; scroll()
