@@ -306,7 +306,7 @@ class MasterRole(RoleBase):
         if self._pending_plan:
             self._pending_plan = {}
 
-        # ── 多任务拆解: 按句号/连接词切分，逐条分发 ──
+        # ── 多任务拆解: 按句号/换行切分 ──
         tasks = self._split_tasks(user_message)
         if len(tasks) > 1:
             yield f"[检测到 {len(tasks)} 个子任务，依次处理]\n"
@@ -315,18 +315,6 @@ class MasterRole(RoleBase):
                 async for token in self._dispatch_single(task):
                     yield token
             return
-
-        # 机械拆分失败 + 消息>30字 → 调用拆解员
-        if len(user_message) > 30:
-            yield "[拆解中…] "
-            decomposed = await self._decompose_task(user_message)
-            if decomposed and len(decomposed) > 1:
-                yield f"识别出 {len(decomposed)} 个子任务\n"
-                for i, task in enumerate(decomposed):
-                    yield f"\n── 子任务 {i+1}/{len(decomposed)} ──\n"
-                    async for token in self._dispatch_single(task):
-                        yield token
-                return
 
         async for token in self._dispatch_single(user_message):
             yield token
