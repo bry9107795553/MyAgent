@@ -428,7 +428,7 @@ onMounted(() => {
   transition: margin-left 0.25s ease; position: relative; z-index: 1; overflow-y: auto;
 }
 .sidebar.collapsed { margin-left: -260px; box-shadow: 2px 0 8px rgba(0,0,0,0.06); }
-.sidebar-expand { position: absolute; left: 0; top: 50%; transform: translateY(-50%); z-index: 100; padding: 8px 10px; background: var(--bg-surface); color: var(--text-secondary); border: 1px solid var(--border); border-left: none; border-radius: 0 6px 6px 0; cursor: pointer; font-size: 12px; font-weight: 500; box-shadow: 2px 0 6px rgba(0,0,0,0.04); }
+.sidebar-expand { position: fixed !important; top: 50% !important; transform: translateY(-50%) !important; z-index: 9999 !important; padding: 10px 8px !important; background: var(--accent) !important; color: #fff !important; border: none !important; border-radius: 0 8px 8px 0 !important; cursor: pointer !important; font-size: 13px !important; font-weight: 600 !important; writing-mode: vertical-rl !important; box-shadow: 2px 0 8px rgba(0,0,0,0.15) !important; }
 .sidebar-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 6px 12px; }
 .sidebar-label { font-size: 11px; font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.8px; }
 .sidebar-new { width: 26px; height: 26px; border-radius: 6px; background: none; color: var(--text-tertiary); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.15s; }
@@ -523,8 +523,7 @@ onMounted(() => {
 /* ===== 右栏 ===== */
 .inspector { width: 340px; flex-shrink: 0; background: var(--bg-surface); display: flex; flex-direction: column; overflow: hidden; transition: margin-right 0.25s ease; position: relative; z-index: 1; }
 .inspector.collapsed { margin-right: -340px; box-shadow: -2px 0 8px rgba(0,0,0,0.06); }
-.sidebar-expand[style*="right"] { right: 0; border-radius: 6px 0 0 6px; border-right: 1px solid var(--border); border-left: none; left: auto; }
-.sidebar-expand.right { right: 0 !important; border-radius: 6px 0 0 6px !important; border-left: 1px solid var(--border) !important; border-right: none !important; left: auto !important; }
+.sidebar-expand.right { left: auto !important; right: 0 !important; border-radius: 8px 0 0 8px !important; }
 .inspector .panel-tab-hint { left: -22px; border-radius: 7px 0 0 7px; border-right: none; }
 
 .inspector-tabs { display: flex; padding: 12px 16px 0; gap: 2px; border-bottom: 1px solid var(--border-light); flex-shrink: 0; }
