@@ -279,7 +279,29 @@ async function send() {
   ws.onopen = () => ws.send(JSON.stringify({ message: t }))
   ws.onmessage = e => {
     const d = JSON.parse(e.data)
-    if (d.type === 'stream_token') { buf.value += d.content; scroll() }
+    if (d.type === 'stream_token') {
+      const raw = d.content
+      // 检测流水线进度标记 __PIPE__step/total role status
+      const pipeMatch = raw.match(/__PIPE__(\d+)\/(\d+)\s+(\S+)\s+(done|error)/g)
+      if (pipeMatch) {
+        for (const pm of pipeMatch) {
+          const m = pm.match(/__PIPE__(\d+)\/(\d+)\s+(\S+)\s+(done|error)/)
+          if (m) {
+            const step = parseInt(m[1]), total = parseInt(m[2]), role = m[3], st = m[4]
+            if (pipelineSteps.value.length === 0 || pipelineSteps.value.length !== total) {
+              pipelineSteps.value = Array.from({ length: total }, (_, i) => ({ role: `步骤${i+1}`, s: 'pending', output: '' }))
+            }
+            pipelineSteps.value[step - 1] = { role, s: st === 'error' ? 'error' : 'done', output: '' }
+            if (st === 'done') scroll()
+          }
+        }
+        // 滤掉 __PIPE__ 标记，不显示在对话里
+        const clean = raw.replace(/__PIPE__\S+/g, '').trim()
+        if (clean) { buf.value += clean; scroll() }
+      } else {
+        buf.value += raw; scroll()
+      }
+    }
     else if (d.type === 'stream_meta') {
       lastMeta.value = { type: d.dispatch_type, workgroup: d.workgroup, roles_used: d.roles_used }
       if (d.roles_used?.length) { pipelineSteps.value = d.roles_used.map((r, i) => ({ role: r, s: i === 0 ? 'running' : 'pending', output: '' })); selectedStep.value = 0 }
@@ -292,8 +314,15 @@ async function send() {
       if (pipelineActive.value && pipelineSteps.value.length) {
         try {
           const results = parsePipelineOutput(final)
-          pipelineSteps.value = pipelineSteps.value.map((s, i) => ({ ...s, s: 'done', output: results[i]?.content || '已完成' }))
-        } catch { pipelineSteps.value = pipelineSteps.value.map(s => ({ ...s, s: 'done', output: '已完成' })) }
+          for (let i = 0; i < pipelineSteps.value.length; i++) {
+            if (pipelineSteps.value[i].s === 'pending') {
+              pipelineSteps.value[i].s = 'done'
+            }
+            if (results[i]?.content && !pipelineSteps.value[i].output) {
+              pipelineSteps.value[i].output = results[i].content
+            }
+          }
+        } catch { pipelineSteps.value = pipelineSteps.value.map(s => ({ ...s, s: s.s === 'pending' ? 'done' : s.s, output: s.output || '已完成' })) }
         lastPipeline.value = [...pipelineSteps.value]; selectedStep.value = 0
       }
       pipelineActive.value = false

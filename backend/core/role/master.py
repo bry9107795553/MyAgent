@@ -285,9 +285,32 @@ class MasterRole(RoleBase):
                 "roles_used": matched_wg.get("members", []),
             }
             yield f"[匹配到工作组「{wg_name}」({len(pipeline)} 步流水线)] "
-            # 工作组是串行多步骤，每个步骤需完整输出 → 非流式
-            result = await self._execute_pipeline(matched_wg, user_message)
-            yield result
+            # 流水线进度交错推送: 每步完成推一次，不等全部结束
+            pq = asyncio.Queue()
+
+            async def _on_step(step_num, role_id, status, total):
+                await pq.put(f"\n__PIPE__{step_num}/{total} {role_id} {status}")
+
+            pipe_task = asyncio.ensure_future(
+                self._execute_pipeline(matched_wg, user_message, step_callback=_on_step)
+            )
+            # 交错: 进度事件优先 yield，同时等流水线结束
+            buf = ""
+            while not pipe_task.done():
+                try:
+                    evt = await asyncio.wait_for(pq.get(), timeout=0.3)
+                    buf += evt
+                except asyncio.TimeoutError:
+                    if buf:
+                        yield buf
+                        buf = ""
+                    continue
+            # 排空剩余进度
+            while not pq.empty():
+                buf += pq.get_nowait()
+            if buf:
+                yield buf
+            yield await pipe_task
             return
 
         # 关键词匹配角色
@@ -487,7 +510,8 @@ class MasterRole(RoleBase):
 
     # ── 流水线执行 (Step 3) ──
 
-    async def _execute_pipeline(self, workgroup: dict, user_message: str) -> str:
+    async def _execute_pipeline(self, workgroup: dict, user_message: str,
+                                step_callback=None) -> str:
         """
         按工作组 pipeline DAG 顺序执行各步骤
 
@@ -500,6 +524,7 @@ class MasterRole(RoleBase):
 
         :param workgroup: 工作组配置
         :param user_message: 用户原始消息
+        :param step_callback: 可选异步回调，每步完成时调用 async cb(step_num, role_id, status, total)
         :return: 汇总后的执行结果
         """
         wg_name = workgroup.get("name", workgroup.get("id"))
@@ -613,6 +638,10 @@ class MasterRole(RoleBase):
                             step_results[f"step_{step_num}_{rid}"] = res
                         ok = "✗" if res.startswith("[⚠") else "✓"
                         execution_log.append(f"{ok} 步骤 {step_num}: {rid} 完成")
+                        if step_callback:
+                            await step_callback(step_num, rid,
+                                               "done" if ok == "✓" else "error",
+                                               len(sorted_pipeline))
                     else:
                         print(f"[Master] 并行执行异常: {pr}")
             else:
@@ -630,6 +659,9 @@ class MasterRole(RoleBase):
                 step_results[step_key] = result
                 ok = "✗" if result.startswith("[⚠") else "✓"
                 execution_log.append(f"{ok} 步骤 {step_num}: {rid} 完成")
+                if step_callback:
+                    await step_callback(step_num, rid, "done" if ok == "✓" else "error",
+                                       len(sorted_pipeline))
 
             # 检查是否需要返工
             condition = step_def.get("condition", "")
