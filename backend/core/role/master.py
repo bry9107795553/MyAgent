@@ -306,6 +306,16 @@ class MasterRole(RoleBase):
         if self._pending_plan:
             self._pending_plan = {}
 
+        # 前台确认入口：用户说"确认/开始/好的" → 启动待确认工作组
+        if hasattr(self, '_pending_wg') and self._pending_wg and self._is_confirmation(user_message):
+            pending = self._pending_wg
+            self._pending_wg = None
+            yield "好的，开始执行 👇\n"
+            brief = self._build_brief(user_message)
+            async for token in self._execute_workgroup_stream(pending["wg"], brief, pending["pipeline"]):
+                yield token
+            return
+
         # ── 多任务拆解: 按句号/换行切分 ──
         tasks = self._split_tasks(user_message)
         if len(tasks) > 1:
@@ -398,9 +408,15 @@ class MasterRole(RoleBase):
                 yield token
 
             response = "".join(full_response)
+
+            # 前台问了"确认"类的词 → 暂存上下文，等用户点头
+            if any(kw in response for kw in ["确认", "确认后", "需要您确认"]):
+                self._pending_wg = {"wg": matched_wg, "msg": user_message, "pipeline": pipeline}
+                self._record_task(user_message, response, generate_id("task"))
+                return
+
             if any(kw in response for kw in ["开始执行", "马上安排", "立刻安排", "直接开始", "开始行动", "立即安排"]):
                 yield "\n"
-                # 编译简报：原始需求 + 前台对话收集到的所有信息
                 brief = self._build_brief(user_message)
                 async for token in self._execute_workgroup_stream(matched_wg, brief, pipeline):
                     yield token
