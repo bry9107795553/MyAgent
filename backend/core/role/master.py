@@ -153,9 +153,9 @@ class MasterRole(RoleBase):
     # ------------------------------------------------------------------ #
 
     def _assemble_context(self, task: str, task_id: str, extra_context: str = ""):
-        """主控只需要 3 轮对话做路由判断，不加载全量历史"""
+        """主控上下文: 10轮 = 20条 — 保留足够记忆用于多轮对话"""
         ctx = super()._assemble_context(task, task_id, extra_context)
-        ctx.l0_messages = self._wm.get_recent(n=6)  # 3 轮 = 6 条 (user+assistant)
+        ctx.l0_messages = self._wm.get_recent(n=20)  # 10 轮 (user+assistant)
         return ctx
 
     # ------------------------------------------------------------------ #
