@@ -307,7 +307,10 @@ class MasterRole(RoleBase):
             self._pending_plan = {}
 
         # 用户点击了"✅ 开始执行"按钮 → 启动 _pending_wg
+        if hasattr(self, '_pending_wg') and self._pending_wg:
+            print(f"[Master] _pending_wg 存在: msg={user_message[:20]}, match={user_message.strip() == '开始执行'}")
         if hasattr(self, '_pending_wg') and self._pending_wg and user_message.strip() == "开始执行":
+            print(f"[Master] _pending_wg 触发 → 启动流水线")
             pending = self._pending_wg
             self._pending_wg = None
             yield "开始执行 👇\n"
@@ -411,6 +414,7 @@ class MasterRole(RoleBase):
 
             # 前台说完直接出按钮——用户点击启动流水线
             print(f"[Master] Level 3 → 弹出按钮 (response长度={len(response)})")
+            print(f"[Master] Level 3 → 设置 _pending_wg={wg_name}, msg_len={len(user_message)}")
             self._pending_wg = {"wg": matched_wg, "msg": user_message, "pipeline": pipeline}
             yield ("[[OPTIONS]]" + json.dumps([{
                 "id": "confirm_start", "label": "开始执行", "multi": False,
