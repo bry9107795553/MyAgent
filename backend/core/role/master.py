@@ -431,8 +431,9 @@ class MasterRole(RoleBase):
 
     @staticmethod
     def _is_asking_question(response: str) -> bool:
-        """判断 LLM 回复是否包含提问"""
-        return "？" in response or "?" in response
+        """只看最后一行是否以问号结尾（不是中间是否含问号）"""
+        last = response.strip().split('\n')[-1]
+        return last.endswith('？') or last.endswith('?')
 
     def _build_brief(self, user_message: str) -> str:
         """从前台与用户的对话历史中编译简报，传给教练"""
