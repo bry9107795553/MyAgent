@@ -287,6 +287,12 @@ class MasterRole(RoleBase):
         # 尝试匹配预设工作组
         matched_wg = self._match_workgroup(user_message)
         if matched_wg:
+            # 模糊度守卫: 需求太宽泛时先问清楚再动手
+            clarification = self._check_vague_request(user_message, matched_wg)
+            if clarification:
+                yield clarification
+                return
+
             wg_name = matched_wg.get("name", matched_wg.get("id"))
             pipeline = matched_wg.get("pipeline", [])
             self._last_stream_dispatch = {
@@ -387,6 +393,47 @@ class MasterRole(RoleBase):
     # ------------------------------------------------------------------ #
     # 意图分析
     # ------------------------------------------------------------------ #
+
+    def _check_vague_request(self, message: str, matched_wg: dict) -> str:
+        """
+        模糊度守卫：开发类需求太宽泛时，先反问用户确认，不直接派发。
+        返回反问文本，或空字符串（表示需求足够清晰，可以派发）。
+        """
+        wg_id = matched_wg.get("id", "")
+        # 只拦截开发类工作组
+        dev_wgs = {"dev_full", "dev_code_review", "dev_design_only", "dev_modification", "dev_tech_debt"}
+        if wg_id not in dev_wgs:
+            return ""
+
+        msg = message.strip()
+        # 太短 → 一定模糊
+        if len(msg) <= 10:
+            return (
+                f"好的，你想「{msg}」——不过在开始之前，我需要了解几个关键点：\n\n"
+                f"1. **用途**：这个页面/应用是做什么的？展示作品集、个人博客、还是在线商店？\n"
+                f"2. **风格**：喜欢简洁风还是花哨一点的？有没有参考的网站？\n"
+                f"3. **功能**：需要什么具体功能？（比如表单、图片展示、暗色模式）\n\n"
+                f"简单说两句就行，我就能帮你规划了 👇"
+            )
+
+        # 只有"写/做/开发 + 网页/网站/app/应用" 但没有具体需求描述
+        vague_patterns = [
+            r'^(写|做|开发|帮我|给我)\s*(一个?|个)\s*(网页|网站|页面|app|应用|程序)\s*[。！!！?？]*$',
+            r'^(写|做|开发)\s*(个人|公司|企业)\s*(网页|网站|页面)\s*[。！!！?？]*$',
+        ]
+        import re
+        for pat in vague_patterns:
+            if re.match(pat, msg):
+                return (
+                    f"收到，你想做一个「{msg}」——在动手之前，先聊两句：\n\n"
+                    f"1. **做什么用的**？展示作品？写博客？还是卖东西？\n"
+                    f"2. **大概要几个页面**？比如首页、关于我、项目展示……\n"
+                    f"3. **风格偏好**？简约白底黑字，还是带色彩和动画的？\n\n"
+                    f"你随便说几句，剩下的我来规划 ✋"
+                )
+
+        # 有具体名词（"计算器""待办事项""博客"）→ 通过，不拦截
+        return ""
 
     def _is_simple_greeting(self, message: str) -> bool:
         """判断是否为简单问候/闲聊 (不需要调度)"""
