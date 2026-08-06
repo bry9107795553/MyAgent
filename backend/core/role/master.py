@@ -465,95 +465,11 @@ class MasterRole(RoleBase):
             return None
 
     def _classify_task(self, message: str) -> tuple[int, object]:
-        """
-        Level 1: 自己干 | Level 2: 派一个人 | Level 3: 组团干
-        :return: (level, detail) — detail 在 L2=角色列表, L3=工作组, L1=None
-        """
-        msg = message.strip()
-
-        # ── Level 3: 多步骤开发/创建/修改任务 ──
-        has_project_verb = any(v in msg for v in ["开发", "做项目", "做一个", "实现一个", "开发个",
-                                                    "做个网页", "做个网站", "搭一个项目", "创建项目",
-                                                    "前端页面开发", "静态页面制作", "开发一个", "建一个网站"])
-        if has_project_verb and len(msg) >= 6:
-            wg = self._match_workgroup(message)
-            if wg: return (3, wg)
-
-        # 修改/修复 → dev_modification 工作组（存量项目入口）
-        if any(k in msg for k in ["修改", "改一下", "修复", "重构", "加功能", "调整一下", "优化一下"]):
-            wg = self._match_workgroup(message)
-            if wg and wg.get("id", "").startswith("dev_"): return (3, wg)
-
-        # 含"报告/详细分析/长文" + 足够长 → 工作组
-        if any(k in msg for k in ["报告", "分析报告", "详细分析", "长文"]) and len(msg) > 20:
-            wg = self._match_workgroup(message)
-            if wg: return (3, wg)
-
-        # ── Level 2: 单角色专业任务 ──
-        # 翻译
-        if any(k in msg for k in ["翻译"]):
-            r = self._role_pool.get("translator")
-            if r and len(msg) < 200: return (2, [r])
-
-        # 知识检索
-        if any(k in msg for k in ["搜索", "查资料", "检索", "找文档"]):
-            r = self._role_pool.get("knowledge_retriever")
-            if r: return (2, [r])
-
-        # 文件阅读/分析 → knowledge_retriever（比 master 自己读快，prompt 专精文件解析）
-        has_file_read = any(k in msg for k in ["读", "读取", "查看", "看看", "看", "告诉我", "解释"])
-        has_file_name = bool(re.search(r'[\w./-]+\.[\w]{2,5}', msg))
-        if has_file_read and has_file_name:
-            r = self._role_pool.get("knowledge_retriever")
-            if r: return (2, [r])
-
-        # 写作：≤30字简单写作 → writer；>30字复杂写作 → writer 兜底（报告走 L3 工作组）
-        if any(k in msg for k in ["写", "写作", "文章", "邮件", "文案"]):
-            if len(msg) <= 30 and not any(k in msg for k in ["报告", "详细", "多篇"]):
-                r = self._role_pool.get("writer")
-                if r: return (2, [r])
-            # >30字写作，优先匹配工作组
-            wg = self._match_workgroup(message)
-            if wg and wg.get("id", "").startswith(("report_", "dev_")): return (3, wg)
-            r = self._role_pool.get("writer")
-            if r: return (2, [r])  # 没有匹配工作组，兜底派 writer
-
-        # 总结/概括/摘要 → knowledge_retriever
-        if any(k in msg for k in ["总结", "概括", "摘要", "汇总", "归纳"]):
-            r = self._role_pool.get("knowledge_retriever")
-            if r: return (2, [r])
-
-        # 日程/规划/提醒 → scheduler
-        if any(k in msg for k in ["规划", "安排", "日程", "提醒", "排期"]):
-            r = self._role_pool.get("scheduler")
-            if r: return (2, [r])
-
-        # 分析/对比/评估 → knowledge_retriever
-        if any(k in msg for k in ["分析", "对比", "评估", "比较"]):
-            r = self._role_pool.get("knowledge_retriever")
-            if r: return (2, [r])
-
-        # 创意/方案/头脑风暴 → creative
-        if any(k in msg for k in ["创意", "方案", "头脑风暴", "点子", "想出"]):
-            r = self._role_pool.get("creative")
-            if r: return (2, [r])
-
-        # 文学创作/诗歌/故事 → writer（creative 是头脑风暴角色，不适合文学创作）
-        if any(k in msg for k in ["诗", "诗歌", "故事", "小说", "一首", "一篇"]):
-            r = self._role_pool.get("writer")
-            if r: return (2, [r])
-
-        # 文件操作：保存/写文件 → writer 或 creative（根据是否含创作关键词）
-        if any(k in msg for k in ["保存到", "存储到", "存到", "写入文件"]):
-            r = self._role_pool.get("writer") or self._role_pool.get("creative")
-            if r: return (2, [r])
-
-        # 审查/检查 → quality_checker
-        if any(k in msg for k in ["审查", "检查", "验证"]):
-            match = self._keyword_match_roles(message)
-            if match: return (2, match)
-
-        # ── Level 1 兜底: 自己干 ──
+        """前台的 LLM prompt 决定级别，这里只做匹配"""
+        wg = self._match_workgroup(message)
+        if wg: return (3, wg)
+        roles = self._keyword_match_roles(message)
+        if roles: return (2, roles)
         return (1, None)
 
     @property
