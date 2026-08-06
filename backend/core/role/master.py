@@ -400,13 +400,18 @@ class MasterRole(RoleBase):
         """
         msg = message.strip()
 
-        # ── Level 3: 多步骤开发/创建任务 ──
+        # ── Level 3: 多步骤开发/创建/修改任务 ──
         has_project_verb = any(v in msg for v in ["开发", "做项目", "做一个", "实现一个", "开发个",
                                                     "做个网页", "做个网站", "搭一个项目", "创建项目",
                                                     "前端页面开发", "静态页面制作", "开发一个", "建一个网站"])
         if has_project_verb and len(msg) >= 6:
             wg = self._match_workgroup(message)
             if wg: return (3, wg)
+
+        # 修改/修复 → dev_modification 工作组（存量项目入口）
+        if any(k in msg for k in ["修改", "改一下", "修复", "重构", "加功能", "调整一下", "优化一下"]):
+            wg = self._match_workgroup(message)
+            if wg and wg.get("id", "").startswith("dev_"): return (3, wg)
 
         # 含"报告/详细分析/长文" + 足够长 → 工作组
         if any(k in msg for k in ["报告", "分析报告", "详细分析", "长文"]) and len(msg) > 20:
@@ -431,11 +436,31 @@ class MasterRole(RoleBase):
             r = self._role_pool.get("knowledge_retriever")
             if r: return (2, [r])
 
-        # 简单写作（≤30字 且不含"报告/详细/多篇"）
+        # 写作：≤30字简单写作 → writer；>30字复杂写作 → writer 兜底（报告走 L3 工作组）
         if any(k in msg for k in ["写", "写作", "文章", "邮件", "文案"]):
             if len(msg) <= 30 and not any(k in msg for k in ["报告", "详细", "多篇"]):
                 r = self._role_pool.get("writer")
                 if r: return (2, [r])
+            # >30字写作，优先匹配工作组
+            wg = self._match_workgroup(message)
+            if wg and wg.get("id", "").startswith(("report_", "dev_")): return (3, wg)
+            r = self._role_pool.get("writer")
+            if r: return (2, [r])  # 没有匹配工作组，兜底派 writer
+
+        # 总结/概括/摘要 → knowledge_retriever
+        if any(k in msg for k in ["总结", "概括", "摘要", "汇总", "归纳"]):
+            r = self._role_pool.get("knowledge_retriever")
+            if r: return (2, [r])
+
+        # 分析/对比/评估 → knowledge_retriever
+        if any(k in msg for k in ["分析", "对比", "评估", "比较"]):
+            r = self._role_pool.get("knowledge_retriever")
+            if r: return (2, [r])
+
+        # 创意/方案/头脑风暴 → creative
+        if any(k in msg for k in ["创意", "方案", "头脑风暴", "点子", "想出"]):
+            r = self._role_pool.get("creative")
+            if r: return (2, [r])
 
         # 文学创作/诗歌/故事 → writer（creative 是头脑风暴角色，不适合文学创作）
         if any(k in msg for k in ["诗", "诗歌", "故事", "小说", "一首", "一篇"]):
