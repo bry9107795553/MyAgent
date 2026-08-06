@@ -46,7 +46,7 @@
           <div v-for="(m,i) in messages" :key="i" class="msg" :class="m.role">
             <div class="msg-avatar" v-if="m.role === 'assistant'"><svg viewBox="0 0 24 24" fill="none" width="14" height="14"><rect x="4" y="8" width="16" height="12" rx="3" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="14" r="1.4" fill="currentColor"/><circle cx="15" cy="14" r="1.4" fill="currentColor"/><path d="M12 8V4M9 4h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
             <div class="msg-content">
-              <div class="msg-text" v-html="md(m.content)"></div>
+              <div class="msg-text" v-html="smartMd(m.content)"></div>
               <div v-if="m.meta?.workgroup" class="msg-meta"><span class="meta-tag">{{ m.meta.workgroup }}</span><span class="meta-badge" v-if="m.meta.roles_used?.length">{{ m.meta.roles_used.length }} 步</span></div>
             </div>
             <div class="msg-avatar avatar-user" v-if="m.role === 'user'">U</div>
@@ -159,6 +159,58 @@ function startDrag(side, e) {
 
 function md(t) { try { return marked(t || '') } catch { return t || '' } }
 
+function smartMd(t) {
+  if (!t) return ''
+  // 思维链折叠处理
+  t = t.replace(/<thinking>([\s\S]*?)<\/thinking>/g, (_, think) => {
+    const short = think.slice(0, 120).replace(/\n/g, ' ') + '...'
+    return `<details class="think-chain"><summary>思考过程 · ${short}</summary><div class="think-content">${marked(think)}</div></details>`
+  })
+  // 检测是否以 HTML 代码为主（占内容的 60% 以上是 HTML）
+  const htmlRatio = (t.match(/<\/?[a-z][\s\S]*?>/gi) || []).length / Math.max(t.length, 1)
+  if (htmlRatio > 0.3 && t.length > 200) {
+    const truncated = t.replace(/```html[\s\S]*?```/gi, (m) => {
+      const lines = m.split('\n')
+      const first = lines.slice(0, 5).join('\n')
+      return `<div class="code-fold" data-full="${encodeURIComponent(m)}">${marked(first)}<button class="code-expand-btn" onclick="this.closest('.code-fold').classList.add('open');this.remove()">展开全部 (${lines.length} 行)</button></div>`
+    })
+    return marked(truncated)
+  }
+  // 文件路径高亮
+  let text = t.replace(/([\w./-]+\.[\w]{2,4})(\s|$|[,;:])/g, (m, p, e) =>
+    /\.(py|js|ts|vue|json|yaml|yml|md|html|css|scss|sh|txt|xml)$/.test(p)
+      ? `<code class="file-path">${p}</code>${e}` : m
+  )
+  return marked(text)
+}
+
+// 代码块折叠初始化
+function initCodeFolding() {
+  nextTick(() => {
+    const msgEl = document.querySelector('.messages')
+    if (!msgEl) return
+    msgEl.querySelectorAll('pre').forEach(pre => {
+      if (pre.classList.contains('code-folded')) return
+      const lines = pre.textContent.split('\n').length
+      if (lines > 15 && pre.closest('.msg-text')) {
+        pre.classList.add('code-folded')
+        pre.style.maxHeight = '180px'
+        pre.style.overflow = 'hidden'
+        pre.style.position = 'relative'
+        const btn = document.createElement('button')
+        btn.className = 'code-expand-btn'
+        btn.textContent = `展开全部 (${lines} 行) ▼`
+        btn.onclick = () => {
+          pre.style.maxHeight = 'none'
+          pre.classList.remove('code-folded')
+          btn.remove()
+        }
+        pre.appendChild(btn)
+      }
+    })
+  })
+}
+
 // ---- HTML 预览 ----
 function hasHtmlCode(text) { return /<(!DOCTYPE|html|head|body|div|script|style)/i.test(text) }
 function extractHtml(text) {
@@ -260,7 +312,7 @@ function parsePipelineOutput(text) {
   return steps
 }
 function sendQuick(t) { txt.value = t; nextTick(() => { send() }) }
-function scroll() { nextTick(() => { if (msgEl.value) msgEl.value.scrollTop = msgEl.value.scrollHeight }) }
+function scroll() { nextTick(() => { if (msgEl.value) { msgEl.value.scrollTop = msgEl.value.scrollHeight; initCodeFolding() } }) }
 function resetInputHeight() { if (inputEl.value) inputEl.value.style.height = 'auto' }
 function autoResize(e) { const el = e.target; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 160) + 'px' }
 
@@ -269,6 +321,7 @@ onMounted(() => {
   refreshConversationList()
   const convs = loadFromStorage()
   if (convs.length > 0 && !currentConversation.value) loadConversation(convs[0])
+  initCodeFolding()
 })
 </script>
 
@@ -412,6 +465,35 @@ onMounted(() => {
 .preview-iframe { width: 100%; height: 100%; border: none; background: #fff; }
 .preview-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-tertiary); font-size: 13px; text-align: center; padding: 20px; }
 .preview-code { width: 100%; height: 100%; padding: 16px; overflow-y: auto; font-family: "SF Mono", monospace; font-size: 12px; line-height: 1.7; color: var(--text-secondary); white-space: pre-wrap; background: #fafaf9; margin: 0; }
+
+/* 代码块折叠 */
+.code-folded { position: relative; }
+.code-folded::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 60px;
+  background: linear-gradient(transparent, #1e293b);
+}
+.code-expand-btn {
+  position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
+  padding: 3px 14px; font-size: 10px; font-weight: 600;
+  background: rgba(91,93,240,0.15); color: #a5b4fc;
+  border: 1px solid rgba(91,93,240,0.3); border-radius: 12px;
+  cursor: pointer; z-index: 2; font-family: inherit;
+  transition: all 0.15s; white-space: nowrap;
+}
+.code-expand-btn:hover { background: rgba(91,93,240,0.3); color: #fff; }
+.file-path { background: var(--bg-hover); color: var(--accent); padding: 1px 6px; border-radius: 4px; font-size: 12px; cursor: default; }
+
+/* 思维链 */
+.think-chain { margin: 6px 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.think-chain summary {
+  padding: 6px 14px; font-size: 11px; color: var(--text-tertiary);
+  background: var(--bg-hover); cursor: pointer; font-style: italic;
+  list-style: none; display: flex; align-items: center; gap: 6px;
+}
+.think-chain summary::before { content: '↓ 展开'; font-style: normal; font-weight: 600; color: var(--accent); font-size: 10px; }
+.think-chain[open] summary::before { content: '↑ 收起'; }
+.think-chain summary:hover { background: rgba(91,93,240,0.06); }
+.think-content { padding: 10px 14px; font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 3px; }

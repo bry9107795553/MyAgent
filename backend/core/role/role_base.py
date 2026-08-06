@@ -509,9 +509,12 @@ class RoleBase(ABC):
                 return
 
             content = result.get("content") or ""
-            # 30B MoE 思考模式：若 content 为空，回退到 reasoning
-            if not content:
-                reasoning = result.get("reasoning") or ""
+            # 30B MoE 思考模式：提取 reasoning，作为折叠的思维链展示
+            reasoning = result.get("reasoning") or ""
+            if reasoning and content:
+                yield f'\n<thinking>{reasoning}</thinking>\n'
+            elif not content:
+                reasoning = reasoning or ""
                 if reasoning:
                     content = reasoning
                     print(f"[Role:{self.id}] ℹ 流式模式回退 reasoning ({len(reasoning)} chars)")
