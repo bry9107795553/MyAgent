@@ -1,0 +1,10 @@
+MyAgent 核心功能
+
+1. 19 角色多 Agent 系统 - 覆盖开发全流程
+2. 三级分流调度 - Level1自己干 / Level2派一人 / Level3组团
+3. 四级渐进记忆 - L0原始→L1摘要→L2稠密→L3知识三元组
+4. 10 条预设工作组 - 开发/报告/翻译/审查/创作
+5. 真实工具落盘 - file_read/write/list/code_exec
+6. 本地推理 100% - llama.cpp + ROCm, 零云端依赖
+7. 可拖拽工作台 - GridStack.js 模块化
+8. 单卡 48GB 部署 - Qwen2.5-14B Q4_K_M
