@@ -16,6 +16,7 @@ from pydantic import ValidationError
 
 from config.settings import settings
 from core.llm.gateway import llm_gateway
+from core.memory.store import generate_id, now_iso
 from core.module_engine.schemas import ModuleConfig, FieldDef
 from core.module_engine.templates import TEMPLATE_REGISTRY, get_template
 
