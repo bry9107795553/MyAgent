@@ -381,7 +381,12 @@ async function send() {
       pipelineActive.value = false
       if (hasHtmlCode(final)) {
         const html = extractHtml(final)
-        if (html) { htmlContent.value = html; rightTab.value = 'preview' }
+        if (html) {
+          htmlContent.value = html; rightTab.value = 'preview'
+          // 把 HTML 从对话区替换为占位符，避免在对话里渲染
+          const placeholder = '\n\n📦 **HTML 已生成** — 请在右侧"预览"面板查看\n\n<details><summary>查看源码</summary>\n\n```html\n' + html + '\n```\n\n</details>'
+          messages.value[messages.value.length - 1].content = final.replace(/<!DOCTYPE[\s\S]*?<\/html>/i, placeholder).replace(/```html\n[\s\S]*?```/g, placeholder)
+        }
       }
       // 自动刷新产物文件列表（后端可能在 stream_end 后落盘）
       setTimeout(refreshFiles, 500)
