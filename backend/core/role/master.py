@@ -647,9 +647,10 @@ class MasterRole(RoleBase):
             "搜索": "web_search", "查": "web_search", "搜": "web_search",
             "找资料": "rag_search", "检索": "rag_search",
             "文档": "document_parsing",
-            # 写作
-            "写": "report_writing", "写作": "report_writing",
-            "报告": "report_writing", "文章": "report_writing",
+            # 写作（去掉"写"——太宽泛，普通写作由 master 直接 LLM 回答）
+            "写作": "report_writing", "撰稿": "report_writing",
+            "报告": "report_writing", "总结": "report_writing",
+            "文章": "report_writing", "论文": "report_writing",
             "邮件": "email_drafting", "文案": "copywriting",
             # 翻译
             "翻译": "translation", "translate": "translation",
