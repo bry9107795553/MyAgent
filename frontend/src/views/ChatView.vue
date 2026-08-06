@@ -61,7 +61,7 @@
 
       <div class="input-area">
         <div class="input-box">
-          <textarea v-model="txt" placeholder="发消息或输入关键词触发工作组..." rows="1" @keydown.enter.exact.prevent="send" @input="autoResize" ref="inputEl" :disabled="streaming"/>
+          <textarea v-model="txt" placeholder="发消息或输入关键词触发工作组..." rows="1" @keydown.enter.exact.prevent="send" @input="autoResize" ref="inputEl" :disabled="streaming"></textarea>
           <button class="send-btn" @click="send" :disabled="streaming || !txt.trim()">
             <svg v-if="!streaming" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8l12-5-4 12-2-5-6-2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
             <div v-else class="loading-dots"><span></span><span></span><span></span></div>
