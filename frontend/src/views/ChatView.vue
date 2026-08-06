@@ -394,6 +394,8 @@ async function send() {
       }
       // 自动刷新产物文件列表（后端可能在 stream_end 后落盘）
       setTimeout(refreshFiles, 500)
+      // 绑定选项按钮点击事件（[[OPTIONS]] 在 stream_end 后才被 smartMd 渲染）
+      nextTick(scroll)
     }
   }
   ws.onerror = () => { streaming.value = false; buf.value = ''; pipelineActive.value = false }
