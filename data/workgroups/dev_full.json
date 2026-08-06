@@ -15,7 +15,7 @@
     "写一个API服务"
   ],
   "members": [
-    "coach", "designer", "developer", "inspector", "tester", "deployer", "cleaner", "experience_evaluator"
+    "coach", "designer", "developer", "inspector", "tester", "deployer", "cleaner"
   ],
   "pipeline": [
     {
@@ -39,7 +39,7 @@
     {
       "step": 3,
       "role": "developer",
-      "action": "按项目计划和设计稿实现代码。用 file_write 工具将代码写入项目目录。技术栈默认：React+Vite+CSS Modules。",
+      "action": "按项目计划和设计稿实现代码。用 file_write 将所有文件写入 frontend/src/components/ 目录。必须真写文件，不要只说'已写入'。React+Vite+CSS Modules。",
       "input_from": "step_2",
       "output_to": "step_4",
       "parallel_with": [],
@@ -48,7 +48,7 @@
     {
       "step": 4,
       "role": "inspector",
-      "action": "审查developer产出的代码。⚠ 只审查真实存在的文件，用file_list验证。如果上一步未产出代码，报告'无代码，跳过'。",
+      "action": "用 file_list 列出 frontend/src/components/ 目录，审查文件存在且代码质量合格。无文件则报告'无代码产出'。",
       "input_from": "step_3",
       "output_to": "step_5",
       "parallel_with": [],
@@ -57,7 +57,7 @@
     {
       "step": 5,
       "role": "tester",
-      "action": "测试代码。⚠ 只测试真实文件。先用file_list确认文件存在。无文件则报告'无代码，跳过'。",
+      "action": "用 file_list 确认 frontend/src/components/ 有代码文件。有则跑测试，无则报告'跳过'。",
       "input_from": "step_4",
       "output_to": "step_6",
       "parallel_with": [],
