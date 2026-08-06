@@ -77,6 +77,24 @@ def _dedup_tool_calls(tool_calls: list[dict]) -> list[dict]:
         if key not in seen:
             seen.add(key)
             unique.append(tc)
+    # file_write 同路径去重: 多条写入同一个文件 → 只保留最后一条
+    path_seen: dict[str, int] = {}
+    for i, tc in enumerate(unique):
+        fn = tc.get("function", {})
+        if fn.get("name") == "file_write":
+            try:
+                a = json.loads(fn.get("arguments", "{}")) if isinstance(fn.get("arguments", ""), str) else fn.get("arguments", {})
+                p = a.get("path", "")
+                if p:
+                    path_seen[p] = i  # 记录最后一次出现位置
+            except Exception:
+                pass
+    if path_seen:
+        keep = set(path_seen.values())
+        filtered = [tc for i, tc in enumerate(unique) if tc.get("function", {}).get("name") != "file_write" or i in keep]
+        if len(filtered) < len(unique):
+            print(f"[Role:*] ⚠ 同路径 file_write 去重: {len(unique)} → {len(filtered)}")
+        unique = filtered
     if len(tool_calls) > len(unique):
         print(f"[Role:*] ⚠ 工具去重: {len(tool_calls)} → {len(unique)} (有 {len(tool_calls) - len(unique)} 个重复)")
     return unique
