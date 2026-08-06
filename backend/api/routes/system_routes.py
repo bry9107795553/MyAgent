@@ -69,6 +69,40 @@ async def system_overview():
     }
 
 
+# ── 产物文件 API ──
+import os
+from pathlib import Path
+from fastapi.responses import PlainTextResponse
+
+OUTPUTS_DIR = Path("data/outputs")
+
+@router.get("/outputs")
+async def list_outputs():
+    """列出 data/outputs/ 下的所有产物文件"""
+    outputs = []
+    if OUTPUTS_DIR.exists():
+        for f in sorted(OUTPUTS_DIR.iterdir(), key=lambda f: f.stat().st_mtime, reverse=True):
+            if f.is_file():
+                size = f.stat().st_size
+                size_str = f"{size / 1024:.1f}KB" if size > 1024 else f"{size}B"
+                outputs.append({
+                    "name": f.name,
+                    "ext": f.suffix,
+                    "size": size_str,
+                    "mtime": f.stat().st_mtime,
+                })
+    return outputs
+
+@router.get("/outputs/{filename:path}", response_class=PlainTextResponse)
+async def read_output(filename: str):
+    """读取单个产物文件的内容"""
+    target = OUTPUTS_DIR / filename
+    if not target.exists():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="文件不存在")
+    return target.read_text(encoding="utf-8", errors="replace")
+
+
 # ---- 文件阅览 API ----
 READABLE_EXTS = {".md",".txt",".json",".yaml",".yml",".xml",".html",".css",
                  ".js",".ts",".vue",".py",".sh",".csv",".toml",".cfg",".ini",

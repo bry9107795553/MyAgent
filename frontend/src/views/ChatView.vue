@@ -107,13 +107,21 @@
             <div class="preview-tabs">
               <button class="preview-tab" :class="{active: previewMode === 'web'}" @click="previewMode = 'web'">页面</button>
               <button class="preview-tab" :class="{active: previewMode === 'code'}" @click="previewMode = 'code'">源码</button>
+              <button class="preview-tab" :class="{active: previewMode === 'files'}" @click="previewMode = 'files'; refreshFiles()">文件</button>
             </div>
           </div>
           <div class="preview-body">
             <iframe v-if="previewMode === 'web' && htmlContent" class="preview-iframe" :srcdoc="htmlContent" sandbox="allow-scripts"/>
             <div v-else-if="previewMode === 'web'" class="preview-empty"><div class="preview-empty-icon">⊞</div>产物将在此预览<br><span style="font-size:11px;margin-top:4px">HTML / 报告 / 图片</span></div>
-            <pre v-else class="preview-code">{{ htmlContent || '暂无源码' }}</pre>
-          </div>
+            <pre v-else-if="previewMode === 'code'" class="preview-code">{{ htmlContent || '暂无源码' }}</pre>
+            <div v-else class="file-list">
+              <div v-if="outputFiles.length === 0" class="preview-empty"><div class="preview-empty-icon">📂</div>暂无产物文件<br><span style="font-size:11px;margin-top:4px">对话中生成的文件将出现在这里</span></div>
+              <div v-for="f in outputFiles" :key="f.name" class="file-item" @click="loadFileContent(f)">
+                <span class="file-icon">{{ f.ext === '.html' ? '🌐' : f.ext === '.md' ? '📝' : f.ext === '.py' ? '🐍' : '📄' }}</span>
+                <span class="file-name">{{ f.name }}</span>
+                <span class="file-size">{{ f.size }}</span>
+              </div>
+            </div>
         </div>
       </div>
     </aside>
@@ -136,6 +144,20 @@ const inspectorCollapsed = ref(false)
 const rightTab = ref('pipeline')
 const previewMode = ref('web')
 const htmlContent = ref('')
+
+// 产物文件
+const outputFiles = ref([])
+const API_BASE = window.location.origin
+async function refreshFiles() {
+  try {
+    const r = await fetch(API_BASE + '/api/system/outputs')
+    outputFiles.value = await r.json()
+  } catch { outputFiles.value = [] }
+}
+async function loadFileContent(f) {
+  const r = await fetch(API_BASE + '/api/system/outputs/' + f.name)
+  if (r.ok) { htmlContent.value = await r.text(); previewMode.value = 'code' }
+}
 
 // 拖拽
 const sidebarEl = ref(null), inspectorEl = ref(null)
@@ -361,6 +383,8 @@ async function send() {
         const html = extractHtml(final)
         if (html) { htmlContent.value = html; rightTab.value = 'preview' }
       }
+      // 自动刷新产物文件列表（后端可能在 stream_end 后落盘）
+      setTimeout(refreshFiles, 500)
     }
   }
   ws.onerror = () => { streaming.value = false; buf.value = ''; pipelineActive.value = false }
@@ -528,6 +552,14 @@ onMounted(() => {
 .preview-iframe { width: 100%; height: 100%; border: none; background: #fff; }
 .preview-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-tertiary); font-size: 13px; text-align: center; padding: 20px; }
 .preview-code { width: 100%; height: 100%; padding: 16px; overflow-y: auto; font-family: "SF Mono", monospace; font-size: 12px; line-height: 1.7; color: var(--text-secondary); white-space: pre-wrap; background: #fafaf9; margin: 0; }
+
+/* 文件列表 */
+.file-list { flex: 1; overflow-y: auto; padding: 8px; background: #f8f8f6; }
+.file-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; cursor: pointer; transition: all 0.12s; margin-bottom: 2px; }
+.file-item:hover { background: rgba(91,93,240,0.06); }
+.file-icon { font-size: 16px; flex-shrink: 0; }
+.file-name { font-size: 12px; color: var(--text-primary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-size { font-size: 10px; color: var(--text-tertiary); flex-shrink: 0; }
 
 /* 代码块折叠 */
 .code-folded { position: relative; }
