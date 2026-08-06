@@ -430,6 +430,16 @@ class MasterRole(RoleBase):
                 r = self._role_pool.get("writer")
                 if r: return (2, [r])
 
+        # 创意写作/诗歌 → creative
+        if any(k in msg for k in ["诗", "诗歌", "故事", "小说", "创作"]):
+            r = self._role_pool.get("creative")
+            if r: return (2, [r])
+
+        # 文件操作：保存/写文件 → writer 或 creative（根据是否含创作关键词）
+        if any(k in msg for k in ["保存到", "存储到", "存到", "写入文件"]):
+            r = self._role_pool.get("writer") or self._role_pool.get("creative")
+            if r: return (2, [r])
+
         # 审查/检查 → quality_checker
         if any(k in msg for k in ["审查", "检查", "验证"]):
             match = self._keyword_match_roles(message)
