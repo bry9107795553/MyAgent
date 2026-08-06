@@ -393,9 +393,8 @@ class MasterRole(RoleBase):
                 "roles_used": matched_wg.get("members", []),
             }
             ctx = self._assemble_context(
-                f"用户说：{user_message}\n\n这个需求匹配到了「{wg_name}」工作组。"
-                f"作为前台接待，先根据工作守则判断：需求够清楚就直接说'马上安排团队开始执行'；"
-                f"如果还需要了解什么，先问用户，并告知这个问题会转给哪个团队处理。",
+                f"用户说：{user_message}\n\n匹配到了「{wg_name}」工作组。"
+                f"作为前台：需求模糊就先问清楚，需求明确就说'好的，我让教练来分析，请稍等'。",
                 generate_id("task"), ""
             )
             full_response = []
@@ -404,9 +403,9 @@ class MasterRole(RoleBase):
                 yield token
 
             response = "".join(full_response)
-            # 仅这些词触发执行 — 不含"我交给"(prompt里每句都有)
-            if any(kw in response for kw in ["开始执行", "马上安排", "立刻安排", "直接开始", "开始行动", "立即安排"]):
+            if any(kw in response for kw in ["开始执行", "马上安排", "立刻安排", "直接开始", "开始行动", "立即安排", "让教练"]):
                 yield "\n"
+                # 让教练（流水线第一步）接手：分析需求 → 出计划 → 派发
                 async for token in self._execute_workgroup_stream(matched_wg, user_message, pipeline):
                     yield token
 
