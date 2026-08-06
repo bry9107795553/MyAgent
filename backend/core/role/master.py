@@ -399,10 +399,12 @@ class MasterRole(RoleBase):
             pipeline = matched_wg.get("pipeline", [])
             wg_name = matched_wg.get("name", "工作组")
 
-            # 让前台 LLM 自由回应：可以追问、确认、或直接安排执行
+            # 让前台 LLM 自由回应：先告诉用户谁来处理，再确认或追问
             ctx = self._assemble_context(
-                f"用户说：{user_message}\n\n这个需求匹配到了「{wg_name}」工作组。"
-                f"作为前台接待，请根据工作守则判断：需求够清楚就直接安排执行，如果还需要了解什么就先问用户。",
+                f"用户说：{user_message}\n\n"
+                f"这个需求匹配到了「{wg_name}」工作组（{', '.join(matched_wg.get('members', [])[:5])}...）。"
+                f"作为前台接待，你必须先告诉用户：'这个任务我会交给{'+'.join(matched_wg.get('members', [])[:3])}团队来处理'。"
+                f"然后判断：需求够清楚就确认开始，还需要了解什么就先问用户。",
                 generate_id("task"), ""
             )
             full_response = []
