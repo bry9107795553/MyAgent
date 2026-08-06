@@ -394,16 +394,10 @@ class MasterRole(RoleBase):
             wg_id = matched_wg.get("id", "")
             pipeline = matched_wg.get("pipeline", [])
 
-            # Plan-First: 开发类 → 展示计划，用户确认后执行
-            if matched_wg.get("conditions", {}).get("auto_approve") and wg_id.startswith("dev_"):
-                plan = self._build_execution_plan(matched_wg, user_message)
-                self._pending_plan = {"wg": matched_wg, "msg": user_message, "pipeline": pipeline}
-                self._last_stream_dispatch = {
-                    "type": "workgroup",
-                    "workgroup": matched_wg.get("name", wg_id),
-                    "roles_used": matched_wg.get("members", []),
-                }
-                yield plan
+            # 开发类工作组 → 直接执行，内部进度用 __PIPE__ 标记
+            if wg_id.startswith("dev_"):
+                async for token in self._execute_workgroup_stream(matched_wg, user_message, pipeline):
+                    yield token
                 return
 
             # 模糊度守卫
@@ -695,15 +689,18 @@ class MasterRole(RoleBase):
         }
         pq = asyncio.Queue()
 
+        # 角色→中文进度映射
+        role_names = {
+            "coach": "需求分析", "designer": "界面设计", "developer": "代码编写",
+            "inspector": "代码审查", "tester": "测试验证", "deployer": "部署上线",
+            "cleaner": "清理缓存", "writer": "文档编写", "quality_checker": "质检校对",
+            "translator": "翻译处理", "knowledge_retriever": "资料检索",
+        }
         async def _on_step(step_num, role_id, status, total, output):
-            summary = ""
-            if output:
-                lines = [l.strip() for l in output.split('\n') if l.strip() and not l.strip().startswith('#')]
-                if lines:
-                    summary = re.sub(r'^[-*>`|]+\s*', '', lines[0])[:120]
+            role_label = role_names.get(role_id, role_id)
             await pq.put((
                 f"\n\n__PIPE__{step_num}/{total} {role_id} {status}",
-                role_id, summary, output or "",
+                f"{role_label}", output or "",
             ))
 
         pipe_task = asyncio.ensure_future(
@@ -712,26 +709,24 @@ class MasterRole(RoleBase):
         buf = ""
         while not pipe_task.done():
             try:
-                evt, rid, summary, output = await asyncio.wait_for(pq.get(), timeout=0.3)
+                evt, rid, output = await asyncio.wait_for(pq.get(), timeout=0.3)
                 buf += evt
                 status_icon = "✅" if "done" in evt else "❌"
-                if summary:
-                    buf += f"\n\n{status_icon} **{rid}** — {summary}\n"
+                buf += f"\n\n{status_icon} **{rid}**\n"
                 if output and len(output) > 200:
-                    buf += f"<details class=\"output-fold\"><summary>📄 查看完整产出</summary><div class=\"output-content\">\n\n{output}\n\n</div></details>\n"
+                    buf += f"<details class=\"output-fold\"><summary>📄 查看产出</summary><div class=\"output-content\">\n\n{output}\n\n</div></details>\n"
                 elif output:
                     buf += f"\n{output}\n"
             except asyncio.TimeoutError:
                 if buf: yield buf; buf = ""
                 continue
         while not pq.empty():
-            evt, rid, summary, output = pq.get_nowait()
+            evt, rid, output = pq.get_nowait()
             buf += evt
             status_icon = "✅" if "done" in evt else "❌"
-            if summary:
-                buf += f"\n\n{status_icon} **{rid}** — {summary}\n"
+            buf += f"\n\n{status_icon} **{rid}**\n"
             if output and len(output) > 200:
-                buf += f"<details class=\"output-fold\"><summary>📄 查看完整产出</summary><div class=\"output-content\">\n\n{output}\n\n</div></details>\n"
+                buf += f"<details class=\"output-fold\"><summary>📄 查看产出</summary><div class=\"output-content\">\n\n{output}\n\n</div></details>\n"
             elif output:
                 buf += f"\n{output}\n"
         if buf: yield buf
