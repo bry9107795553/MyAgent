@@ -29,6 +29,7 @@ MasterRole — 主控角色 (前台接待 + 调度中心)
 """
 import asyncio
 import json
+import re
 from pathlib import Path
 from typing import Optional, AsyncGenerator
 
@@ -398,7 +399,6 @@ class MasterRole(RoleBase):
         :return: (level, detail) — detail 在 L2=角色列表, L3=工作组, L1=None
         """
         msg = message.strip()
-        import re
 
         # ── Level 3: 多步骤开发/创建任务 ──
         has_project_verb = any(v in msg for v in ["开发", "做项目", "做一个", "实现一个", "开发个",
