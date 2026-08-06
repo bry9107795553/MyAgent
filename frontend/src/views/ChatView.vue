@@ -597,6 +597,19 @@ onMounted(() => {
 .think-chain summary:hover { background: rgba(91,93,240,0.06); }
 .think-content { padding: 10px 14px; font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
 
+/* 产出折叠 — 用 [open] 显隐 .output-content，避免 marked 拆散 details 结构时内容意外展开 */
+.output-fold { margin: 6px 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.output-fold > .output-content { display: none; padding: 10px 14px; font-size: 12px; line-height: 1.6; color: var(--text-secondary); background: var(--bg-hover); }
+.output-fold[open] > .output-content { display: block; }
+.output-fold > summary {
+  padding: 6px 14px; font-size: 11px; color: var(--text-tertiary);
+  background: var(--bg-hover); cursor: pointer;
+  list-style: none; display: flex; align-items: center; gap: 6px;
+}
+.output-fold > summary::before { content: '↓ 展开'; font-weight: 600; color: var(--accent); font-size: 10px; }
+.output-fold[open] > summary::before { content: '↑ 收起'; }
+.output-fold > summary:hover { background: rgba(91,93,240,0.06); }
+
 /* 选项按钮组 */
 .opt-container { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
 .opt-group-label { font-size: 12px; color: var(--text-tertiary); margin-bottom: 6px; font-weight: 600; }

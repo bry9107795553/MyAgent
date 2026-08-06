@@ -584,7 +584,7 @@ class MasterRole(RoleBase):
                 if summary:
                     buf += f"\n\n{status_icon} **{rid}** — {summary}\n"
                 if output and len(output) > 200:
-                    buf += f"<details><summary>📄 查看完整产出</summary>\n\n{output}\n\n</details>\n"
+                    buf += f"<details class=\"output-fold\"><summary>📄 查看完整产出</summary><div class=\"output-content\">\n\n{output}\n\n</div></details>\n"
                 elif output:
                     buf += f"\n{output}\n"
             except asyncio.TimeoutError:
@@ -597,7 +597,7 @@ class MasterRole(RoleBase):
             if summary:
                 buf += f"\n\n{status_icon} **{rid}** — {summary}\n"
             if output and len(output) > 200:
-                buf += f"<details><summary>📄 查看完整产出</summary>\n\n{output}\n\n</details>\n"
+                buf += f"<details class=\"output-fold\"><summary>📄 查看完整产出</summary><div class=\"output-content\">\n\n{output}\n\n</div></details>\n"
             elif output:
                 buf += f"\n{output}\n"
         if buf: yield buf
