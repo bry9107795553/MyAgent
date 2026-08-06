@@ -308,6 +308,22 @@ class MasterRole(RoleBase):
         if self._pending_plan:
             self._pending_plan = {}
 
+        # ── 多任务拆解: 按句号/连接词切分，逐条分发 ──
+        tasks = self._split_tasks(user_message)
+        if len(tasks) > 1:
+            yield f"[检测到 {len(tasks)} 个子任务，依次处理]\n"
+            for i, task in enumerate(tasks):
+                yield f"\n── 子任务 {i+1}/{len(tasks)} ──\n"
+                async for token in self._dispatch_single(task):
+                    yield token
+            return
+
+        async for token in self._dispatch_single(user_message):
+            yield token
+        return
+
+    async def _dispatch_single(self, user_message: str) -> AsyncGenerator[str, None]:
+        """单任务分发（被 dispatch_stream 多任务拆解后调用）"""
         # ── 三级分流 ──
         level, detail = self._classify_task(user_message)
 
@@ -402,7 +418,38 @@ class MasterRole(RoleBase):
             )
             return
 
-    # ── 三级分流 ──
+    # ── 多任务拆解 ──
+
+    def _split_tasks(self, message: str) -> list[str]:
+        """按句号、分号、换行和连接词拆分多意图消息为子任务列表"""
+        import re
+        msg = message.strip()
+        # 1. 先按连接词+标点拆分
+        connectors = r'(。|；|;|\n|然后|顺便|另外|此外|接着|还有|同时|以及|之后|熟后)'
+        parts = re.split(connectors, msg)
+        # 2. 合并短片段
+        tasks: list[str] = []
+        buf = ""
+        for p in parts:
+            p = p.strip()
+            if not p:
+                continue
+            if p in ["。", "；", ";", "然后", "顺便", "另外", "此外", "接着", "还有", "同时", "以及", "之后", "熟后"]:
+                if buf:
+                    tasks.append(buf)
+                    buf = ""
+                continue
+            buf += ("；" if buf else "") + p
+        if buf:
+            tasks.append(buf)
+        # 3. 合并过短的片段到相邻任务
+        merged: list[str] = []
+        for t in tasks:
+            if len(t) <= 5 and merged:
+                merged[-1] += "；" + t
+            else:
+                merged.append(t)
+        return merged if len(merged) > 1 else [message]
 
     def _classify_task(self, message: str) -> tuple[int, object]:
         """
