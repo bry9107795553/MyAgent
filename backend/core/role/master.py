@@ -341,9 +341,14 @@ class MasterRole(RoleBase):
             return
 
         # 通用处理 → 真正逐 token 流式
-        ctx = self._assemble_context(user_message, generate_id("task"), "")
+        task_id = generate_id("task")
+        ctx = self._assemble_context(user_message, task_id, "")
+        full_response = []
         async for token in self._call_llm_stream(ctx):
+            full_response.append(token)
             yield token
+        # 记录到工作记忆 (B3 修复: dispatch_stream 需显式调用 _record_task)
+        self._record_task(user_message, "".join(full_response), task_id)
 
     @property
     def last_stream_dispatch(self) -> dict:
@@ -364,12 +369,17 @@ class MasterRole(RoleBase):
 
     async def _handle_greeting(self, message: str) -> str:
         """处理简单问候"""
-        return f"你好！我是 MyAgent 助手，有什么可以帮你的？"
+        reply = f"你好！我是 MyAgent 助手，有什么可以帮你的？"
+        self._record_task(message, reply, generate_id("task"))
+        return reply
 
     async def _handle_general(self, message: str) -> str:
         """处理通用对话 (未匹配到角色，主控自己 LLM 处理)"""
-        ctx = self._assemble_context(message, generate_id("task"), "")
-        return await self._call_llm(ctx)
+        task_id = generate_id("task")
+        ctx = self._assemble_context(message, task_id, "")
+        result = await self._call_llm(ctx)
+        self._record_task(message, result, task_id)
+        return result
 
     async def _call_llm_raw(self, messages: list[dict], **kwargs) -> dict:
         """
