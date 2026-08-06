@@ -98,24 +98,36 @@ if command -v nginx >/dev/null 2>&1; then
     echo -e "  ${GREEN}✓${NC} Nginx 就绪"
 fi
 
-# ===== 4. 外部隧道 (可选) =====
+# ===== 4. 外部隧道 =====
 echo -e "\n${YELLOW}[4/4] 外部访问隧道...${NC}"
-export PATH="$HOME/.local/bin:$PATH" 2>/dev/null
+export PATH="$HOME/.local/bin:$PATH"
+
+# 自动安装 rc-tunnel（如果缺失）
+if ! command -v rc-tunnel >/dev/null 2>&1; then
+    if [ -f /var/run/secrets/frp-self-service/install ]; then
+        bash /var/run/secrets/frp-self-service/install 2>/dev/null && \
+            export PATH="$HOME/.local/bin:$PATH"
+    elif command -v pip3 >/dev/null 2>&1 || command -v pip >/dev/null 2>&1; then
+        pip3 install rc-tunnel 2>/dev/null || pip install rc-tunnel 2>/dev/null
+    fi
+fi
+
+PUBLIC_URL=""
 if command -v rc-tunnel >/dev/null 2>&1; then
     rc-tunnel stop 2>/dev/null; sleep 2
     nohup rc-tunnel expose --port 8088 > /tmp/rc-tunnel.log 2>&1 &
     for i in $(seq 1 10); do
-        URL=$(grep -oE 'https?://rc-[^ ]+' /tmp/rc-tunnel.log 2>/dev/null | head -1)
-        [ -n "$URL" ] && break
+        PUBLIC_URL=$(grep -oE 'https?://rc-[^ ]+' /tmp/rc-tunnel.log 2>/dev/null | head -1)
+        [ -n "$PUBLIC_URL" ] && break
         sleep 2
     done
-    if [ -n "$URL" ]; then
-        echo -e "  ${GREEN}✓${NC} 公网: $URL"
+    if [ -n "$PUBLIC_URL" ]; then
+        echo -e "  ${GREEN}✓${NC} 公网: $PUBLIC_URL"
     else
-        echo -e "  ${YELLOW}⚠${NC} 隧道未获取到 URL，手动: rc-tunnel expose --port 8088"
+        echo -e "  ${YELLOW}⚠${NC} 隧道启动中，手动获取: rc-tunnel expose --port 8088"
     fi
 else
-    echo -e "  ${YELLOW}⚠${NC} 无 rc-tunnel，仅本机访问"
+    echo -e "  ${YELLOW}⚠${NC} 无隧道工具，仅本机访问 (localhost:8088)"
 fi
 
 # ===== 完成 =====
@@ -124,4 +136,5 @@ echo -e "${GREEN}  ✓ MyAgent 启动完成!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo -e "  后端: http://localhost:8080/api/health"
 echo -e "  前端: http://localhost"
+[ -n "$PUBLIC_URL" ] && echo -e "  ${BLUE}公网: $PUBLIC_URL${NC}"
 echo -e "  ${GREEN}一键启动，干净利落。${NC}"
