@@ -115,6 +115,10 @@ echo -e "${YELLOW}[4/7] 安装 Python 依赖...${NC}"
 pip install -r requirements.txt -q
 echo -e "  ${GREEN}✓${NC} 后端依赖安装完成"
 
+# 可选：向量语义检索增强
+echo -e "  ${YELLOW}ℹ${NC} 尝试安装向量检索增强 (可跳过，不影响运行)..."
+pip install sentence-transformers -q 2>/dev/null && echo -e "  ${GREEN}✓${NC} 向量检索已启用" || echo -e "  ${YELLOW}⚠${NC} 向量检索跳过 (将使用关键词搜索)"
+
 # ===== 5. 安装 llama.cpp (ROCm 预编译版，零编译!) =====
 echo ""
 echo -e "${YELLOW}[5/7] 安装 llama.cpp (ROCm 预编译)...${NC}"

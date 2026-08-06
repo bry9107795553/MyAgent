@@ -224,37 +224,103 @@ class KnowledgeBase:
         min_confidence: float = 0.0,
     ) -> list[dict]:
         """
-        关键词搜索三元组
+        混合检索：关键词 + 向量语义（如可用）
 
         :param query: 搜索词
         :param top_k: 返回条数
         :param min_confidence: 最低置信度
         :return: 匹配的三元组列表 (按相关性排序)
         """
+        # 先试向量检索（如模型可用）
+        vec_results = self._vector_search(query, top_k) if self._embed_model else []
+        # 再跑关键词检索
+        kw_results = self._keyword_search(query, top_k, min_confidence)
+        # 合并去重
+        return self._fuse_results(kw_results, vec_results, top_k)
+
+    def _keyword_search(self, query: str, top_k: int, min_confidence: float) -> list[dict]:
+        """原有关键词检索"""
         keywords = set(query.lower().split())
         scored = []
-
         for triple in self._data["triples"]:
             if triple["confidence"] < min_confidence:
                 continue
-
-            # 在 subject + relation + object 中搜索
             text = (
                 triple["subject"] + " " +
                 triple["relation"] + " " +
                 triple["object"]
             ).lower()
             score = sum(1 for kw in keywords if kw in text)
-
             if score > 0:
-                # 方案 C-2: 乘以新鲜度系数（过期知识降权，staleness≥1 时系数→0）
                 freshness = max(0.0, 1.0 - self._compute_staleness(triple))
-                # 置信度加权: 相关度 × 置信度 × 出现次数 × 新鲜度
                 weighted_score = score * triple["confidence"] * (1 + 0.1 * triple.get("occurrences", 1)) * freshness
                 scored.append((weighted_score, triple))
-
         scored.sort(key=lambda x: -x[0])
         return [s for _, s in scored[:top_k]]
+
+    # --- 向量检索（可选增强） ---
+
+    @property
+    def _embed_model(self):
+        """懒加载嵌入模型 — 首次调用时才加载，避免启动时卡住"""
+        if hasattr(self, '_cached_embed'):
+            return self._cached_embed
+        self._cached_embed = None
+        try:
+            from sentence_transformers import SentenceTransformer
+            self._cached_embed = SentenceTransformer('all-MiniLM-L6-v2')
+            print("[KB] ✅ 向量嵌入模型已加载 (all-MiniLM-L6-v2, 22MB)")
+        except ImportError:
+            print("[KB] ℹ 向量检索未启用 — 安装 sentence-transformers 可获得语义搜索")
+        except Exception as e:
+            print(f"[KB] ⚠ 向量模型加载失败: {e}")
+        return self._cached_embed
+
+    def _vector_search(self, query: str, top_k: int) -> list[dict]:
+        """基于嵌入向量的语义搜索"""
+        model = self._embed_model
+        if not model or len(self._data["triples"]) == 0:
+            return []
+        import numpy as np
+        # 构建文档文本
+        docs = [
+            t["subject"] + " " + t["relation"] + " " + t["object"]
+            for t in self._data["triples"]
+        ]
+        # 编码
+        q_vec = model.encode([query], normalize_embeddings=True)[0]
+        d_vecs = model.encode(docs, normalize_embeddings=True)
+        # 余弦相似度
+        sims = np.dot(d_vecs, q_vec)
+        # 取 top-k
+        idxs = np.argsort(sims)[::-1][:top_k * 2]
+        results = []
+        for i in idxs:
+            if sims[i] < 0.3:
+                continue
+            t = self._data["triples"][i]
+            freshness = max(0.0, 1.0 - self._compute_staleness(t))
+            score = float(sims[i]) * t["confidence"] * freshness
+            results.append((score, t))
+        results.sort(key=lambda x: -x[0])
+        return [r for _, r in results[:top_k]]
+
+    @staticmethod
+    def _fuse_results(kw: list[dict], vec: list[dict], top_k: int) -> list[dict]:
+        """RRF 融合关键词和向量结果"""
+        seen = set()
+        fused = []
+        for t in kw:
+            key = (t["subject"], t["relation"], t["object"])
+            if key not in seen:
+                seen.add(key)
+                fused.append(t)
+        for t in vec:
+            key = (t["subject"], t["relation"], t["object"])
+            if key not in seen:
+                seen.add(key)
+                fused.append(t)
+        return fused[:top_k]
 
     def search_by_entity(self, entity_name: str) -> dict:
         """

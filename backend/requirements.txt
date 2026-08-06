@@ -42,3 +42,9 @@ watchdog==5.0.3
 # ===== 配置文件加载 =====
 # pydantic-settings 的 env_file=".env" 功能依赖它 (Settings.model_config)
 python-dotenv==1.0.1
+
+# ===== 向量语义检索 (可选增强) =====
+# 提供向量嵌入能力 (~22MB 模型)，让知识库从关键词匹配升级为语义理解。
+# 未安装时自动降级为纯关键词检索，所有功能正常运行。
+# ⚠️ 安装耗时约 2-5 分钟（含 torch ~2GB），网络慢可跳过。
+sentence-transformers==3.3.1
