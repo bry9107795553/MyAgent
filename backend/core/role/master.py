@@ -417,7 +417,14 @@ class MasterRole(RoleBase):
                 self._record_task(user_message, response, generate_id("task"))
                 return
 
-            if any(kw in response for kw in ["开始执行", "马上安排", "立刻安排", "直接开始", "开始行动", "立即安排", "启动团队", "开始了", "可以开始", "现在开始"]):
+            trigger_matched = any(kw in response for kw in ["开始执行", "马上安排", "立刻安排", "直接开始", "开始行动", "立即安排", "启动团队", "开始了", "可以开始", "现在开始"])
+            # 如果 LLM 没问问题（无 "？") 且有足够上下文 → 自动派发
+            if not trigger_matched and "？" not in response:
+                brief = self._build_brief(user_message)
+                if brief.count("用户答") >= 2 or brief.count("前台问") >= 2:
+                    trigger_matched = True
+
+            if trigger_matched:
                 yield "\n"
                 brief = self._build_brief(user_message)
                 async for token in self._execute_workgroup_stream(matched_wg, brief, pipeline):
