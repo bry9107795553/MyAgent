@@ -68,6 +68,7 @@ class MasterRole(RoleBase):
         self._role_pool: dict[str, dict] = {}
         self._loaded_roles: dict[str, RoleBase] = {}  # 已加载的角色实例
         self._workgroups: dict[str, dict] = {}         # 已加载的工作组配置
+        self._pending_plan: dict = {}                   # 待确认的执行计划 {wg, msg}
 
     # ------------------------------------------------------------------ #
     # 初始化
@@ -287,73 +288,43 @@ class MasterRole(RoleBase):
         # 尝试匹配预设工作组
         matched_wg = self._match_workgroup(user_message)
         if matched_wg:
+            wg_id = matched_wg.get("id", "")
+
+            # Plan-First: 如果上次展示了执行计划，现在检查用户是否确认
+            if self._pending_plan and self._is_confirmation(user_message):
+                pending = self._pending_plan
+                self._pending_plan = {}
+                yield "好的，开始执行 👇\n"
+                async for token in self._execute_workgroup_stream(pending["wg"], pending["msg"], pending["pipeline"]):
+                    yield token
+                return
+
+            # 用户有新的想法或修改意见 → 清除待确认计划，当前消息当新需求重走
+            if self._pending_plan:
+                self._pending_plan = {}
+
             # 模糊度守卫: 需求太宽泛时先问清楚再动手
             clarification = self._check_vague_request(user_message, matched_wg)
             if clarification:
                 yield clarification
                 return
 
-            wg_name = matched_wg.get("name", matched_wg.get("id"))
+            # Plan-First: 开发类工作组 → 先展示计划，确认后再执行
             pipeline = matched_wg.get("pipeline", [])
-            self._last_stream_dispatch = {
-                "type": "workgroup",
-                "workgroup": wg_name,
-                "roles_used": matched_wg.get("members", []),
-            }
-            yield f"[匹配到工作组「{wg_name}」({len(pipeline)} 步流水线)] "
-            # 流水线进度交错推送: 每步完成推一次，不等全部结束
-            pq = asyncio.Queue()
+            if matched_wg.get("conditions", {}).get("auto_approve") and wg_id.startswith("dev_"):
+                plan = self._build_execution_plan(matched_wg, user_message)
+                self._pending_plan = {"wg": matched_wg, "msg": user_message, "pipeline": pipeline}
+                self._last_stream_dispatch = {
+                    "type": "workgroup",
+                    "workgroup": matched_wg.get("name", wg_id),
+                    "roles_used": matched_wg.get("members", []),
+                }
+                yield plan
+                return
 
-            async def _on_step(step_num, role_id, status, total, output):
-                # 提取一行摘要：取产出中第一个非标题、有实际内容的行
-                summary = ""
-                if output:
-                    lines = [l.strip() for l in output.split('\n') if l.strip() and not l.strip().startswith('#')]
-                    if lines:
-                        # 去掉 markdown 标记符，留纯文本
-                        import re
-                        summary = re.sub(r'^[-*>`|]+\s*', '', lines[0])[:120]
-                await pq.put((
-                    f"\n\n__PIPE__{step_num}/{total} {role_id} {status}",
-                    role_id,
-                    summary,
-                    output or "",
-                ))
-
-            pipe_task = asyncio.ensure_future(
-                self._execute_pipeline(matched_wg, user_message, step_callback=_on_step)
-            )
-            buf = ""
-            while not pipe_task.done():
-                try:
-                    evt, rid, summary, output = await asyncio.wait_for(pq.get(), timeout=0.3)
-                    buf += evt
-                    status_icon = "✅" if "done" in evt else "❌"
-                    if summary:
-                        buf += f"\n\n{status_icon} **{rid}** — {summary}\n"
-                    if output and len(output) > 200:
-                        buf += f"<details><summary>📄 查看完整产出</summary>\n\n{output}\n\n</details>\n"
-                    elif output:
-                        buf += f"\n{output}\n"
-                except asyncio.TimeoutError:
-                    if buf:
-                        yield buf
-                        buf = ""
-                    continue
-            while not pq.empty():
-                evt, rid, summary, output = pq.get_nowait()
-                buf += evt
-                status_icon = "✅" if "done" in evt else "❌"
-                if summary:
-                    buf += f"\n\n{status_icon} **{rid}** — {summary}\n"
-                if output and len(output) > 200:
-                    buf += f"<details><summary>📄 查看完整产出</summary>\n\n{output}\n\n</details>\n"
-                elif output:
-                    buf += f"\n{output}\n"
-            if buf:
-                yield buf
-            # 等待任务完成取最终汇总（不输出完整 blob 到对话，避免重复）
-            await pipe_task
+            # 非开发类工作组 → 直接执行（翻译、写作等简单任务）
+            async for token in self._execute_workgroup_stream(matched_wg, user_message, pipeline):
+                yield token
             return
 
         # 关键词匹配角色
@@ -434,6 +405,81 @@ class MasterRole(RoleBase):
 
         # 有具体名词（"计算器""待办事项""博客"）→ 通过，不拦截
         return ""
+
+    def _is_confirmation(self, message: str) -> bool:
+        """判断用户是否在确认执行计划"""
+        msg = message.strip().lower()
+        confirms = {"好的", "好", "开始", "确认", "继续", "行", "可以", "ok", "yes", "go", "是", "对", "嗯", "搞", "做"}
+        return msg in confirms or len(msg) <= 3 and any(c in msg for c in confirms)
+
+    def _build_execution_plan(self, wg: dict, user_message: str) -> str:
+        """生成执行计划展示给用户确认"""
+        wg_name = wg.get("name", wg.get("id", "工作组"))
+        pipeline = wg.get("pipeline", [])
+        lines = [f"📋 **执行计划 — {wg_name}**\n"]
+        lines.append("根据你的需求，我计划按以下步骤执行：\n")
+        for step in sorted(pipeline, key=lambda s: s.get("step", 0)):
+            role = step.get("role", "?")
+            action = step.get("action", "")
+            # 取 action 的第一句话作为简述
+            brief = action.split("。")[0].split(".")[0][:80]
+            lines.append(f"> **{step.get('step', '?')}. {role}** — {brief}")
+        lines.append(f"\n共 {len(pipeline)} 个角色参与。确认开始？输入「好的」继续，或提出修改意见。")
+        return "\n".join(lines)
+
+    async def _execute_workgroup_stream(self, wg: dict, user_message: str, pipeline: list):
+        """执行工作组流水线，流式返回进度"""
+        import asyncio
+        import re
+        wg_name = wg.get("name", wg.get("id"))
+        self._last_stream_dispatch = {
+            "type": "workgroup",
+            "workgroup": wg_name,
+            "roles_used": wg.get("members", []),
+        }
+        pq = asyncio.Queue()
+
+        async def _on_step(step_num, role_id, status, total, output):
+            summary = ""
+            if output:
+                lines = [l.strip() for l in output.split('\n') if l.strip() and not l.strip().startswith('#')]
+                if lines:
+                    summary = re.sub(r'^[-*>`|]+\s*', '', lines[0])[:120]
+            await pq.put((
+                f"\n\n__PIPE__{step_num}/{total} {role_id} {status}",
+                role_id, summary, output or "",
+            ))
+
+        pipe_task = asyncio.ensure_future(
+            self._execute_pipeline(wg, user_message, step_callback=_on_step)
+        )
+        buf = ""
+        while not pipe_task.done():
+            try:
+                evt, rid, summary, output = await asyncio.wait_for(pq.get(), timeout=0.3)
+                buf += evt
+                status_icon = "✅" if "done" in evt else "❌"
+                if summary:
+                    buf += f"\n\n{status_icon} **{rid}** — {summary}\n"
+                if output and len(output) > 200:
+                    buf += f"<details><summary>📄 查看完整产出</summary>\n\n{output}\n\n</details>\n"
+                elif output:
+                    buf += f"\n{output}\n"
+            except asyncio.TimeoutError:
+                if buf: yield buf; buf = ""
+                continue
+        while not pq.empty():
+            evt, rid, summary, output = pq.get_nowait()
+            buf += evt
+            status_icon = "✅" if "done" in evt else "❌"
+            if summary:
+                buf += f"\n\n{status_icon} **{rid}** — {summary}\n"
+            if output and len(output) > 200:
+                buf += f"<details><summary>📄 查看完整产出</summary>\n\n{output}\n\n</details>\n"
+            elif output:
+                buf += f"\n{output}\n"
+        if buf: yield buf
+        await pipe_task
 
     def _is_simple_greeting(self, message: str) -> bool:
         """判断是否为简单问候/闲聊 (不需要调度)"""
