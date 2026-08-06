@@ -285,30 +285,29 @@ class MasterRole(RoleBase):
                 yield chunk
             return
 
+        # Plan-First 确认检查（提前到工作组匹配之前，避免"好的"不匹配任何工作组时被跳过）
+        if self._pending_plan and self._is_confirmation(user_message):
+            pending = self._pending_plan
+            self._pending_plan = {}
+            yield "好的，开始执行 👇\n"
+            async for token in self._execute_workgroup_stream(pending["wg"], pending["msg"], pending["pipeline"]):
+                yield token
+            return
+
+        # 用户有不同的想法 → 清除待确认计划
+        if self._pending_plan:
+            self._pending_plan = {}
+
         # 尝试匹配预设工作组
         matched_wg = self._match_workgroup(user_message)
         if matched_wg:
             wg_id = matched_wg.get("id", "")
-
-            # Plan-First: 如果上次展示了执行计划，现在检查用户是否确认
-            if self._pending_plan and self._is_confirmation(user_message):
-                pending = self._pending_plan
-                self._pending_plan = {}
-                yield "好的，开始执行 👇\n"
-                async for token in self._execute_workgroup_stream(pending["wg"], pending["msg"], pending["pipeline"]):
-                    yield token
-                return
-
-            # 用户有新的想法或修改意见 → 清除待确认计划，当前消息当新需求重走
-            if self._pending_plan:
-                self._pending_plan = {}
 
             # 模糊度守卫: 需求太宽泛时先问清楚再动手（流式反问 + 选项）
             text, options = self._check_vague_request(user_message, matched_wg)
             if text:
                 async for chunk in self._stream_text(text, chunk_size=3, delay=0.02):
                     yield chunk
-                # 发送选项事件（前端渲染为可点击按钮）—— 用 [[OPTIONS]] 避开 markdown 解析
                 if options:
                     yield ("[[OPTIONS]]" + json.dumps(options, ensure_ascii=False) + "[[/OPTIONS]]")
                 return
