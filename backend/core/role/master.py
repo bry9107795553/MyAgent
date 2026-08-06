@@ -608,7 +608,7 @@ class MasterRole(RoleBase):
     def _is_confirmation(self, message: str) -> bool:
         """判断用户是否在确认执行计划"""
         msg = message.strip().lower()
-        confirms = {"好的", "好", "开始", "确认", "继续", "行", "可以", "ok", "yes", "go", "是", "对", "嗯", "搞", "做"}
+        confirms = {"好的", "好", "开始", "确认", "确定", "继续", "行", "可以", "ok", "yes", "go", "是", "对", "嗯", "搞", "做"}
         return msg in confirms or len(msg) <= 3 and any(c in msg for c in confirms)
 
     def _build_execution_plan(self, wg: dict, user_message: str) -> str:
