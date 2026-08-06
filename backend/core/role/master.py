@@ -394,16 +394,9 @@ class MasterRole(RoleBase):
                 return
 
         else:  # level == 3
-            # Level 3: 组团干 — 开发流水线或复杂工作组
-            matched_wg = detail  # detail = matched workgroup
-            wg_id = matched_wg.get("id", "")
+            # Level 3: 组团干 — 所有工作组统一走：先追问→再执行
+            matched_wg = detail
             pipeline = matched_wg.get("pipeline", [])
-
-            # 开发类工作组 → 直接执行，内部进度用 __PIPE__ 标记
-            if wg_id.startswith("dev_"):
-                async for token in self._execute_workgroup_stream(matched_wg, user_message, pipeline):
-                    yield token
-                return
 
             # 模糊度守卫
             text, options = self._check_vague_request(user_message, matched_wg)
@@ -414,7 +407,7 @@ class MasterRole(RoleBase):
                     yield ("[[OPTIONS]]" + json.dumps(options, ensure_ascii=False) + "[[/OPTIONS]]")
                 return
 
-            # 复杂工作组 → 直接执行
+            # 需求清晰 → 直接执行
             async for token in self._execute_workgroup_stream(matched_wg, user_message, pipeline):
                 yield token
             secretary.record_turn(
@@ -515,7 +508,7 @@ class MasterRole(RoleBase):
             return ("", [])
 
         # 太短 → 反问用途/风格/功能
-        if len(msg) <= 6:
+        if len(msg) <= 10:
             return (
                 f"好的，你想「{msg}」——不过在开始之前，我需要了解几个关键点：\n\n",
                 [
