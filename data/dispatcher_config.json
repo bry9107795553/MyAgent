@@ -237,8 +237,8 @@
     }
   },"error_handling": {
     "role_timeout": {
-      "description": "角色超时未响应",
-      "timeout_seconds": 120,
+      "description": "角色超时未响应（14B模型AMD单卡，coach原版prompt~9K tokens prefill需80-100s，180s给足缓冲）",
+      "timeout_seconds": 180,
       "action": "标记异常，通知用户，询问是否重试或换角色"
     },
     "role_failure": {
