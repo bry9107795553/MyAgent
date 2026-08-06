@@ -281,8 +281,8 @@ class MasterRole(RoleBase):
         yield "[分析中...] "
 
         if self._is_simple_greeting(user_message):
-            result = await self._handle_greeting(user_message)
-            yield result
+            async for chunk in self._stream_greeting(user_message):
+                yield chunk
             return
 
         # 尝试匹配预设工作组
@@ -303,10 +303,14 @@ class MasterRole(RoleBase):
             if self._pending_plan:
                 self._pending_plan = {}
 
-            # 模糊度守卫: 需求太宽泛时先问清楚再动手
-            clarification = self._check_vague_request(user_message, matched_wg)
-            if clarification:
-                yield clarification
+            # 模糊度守卫: 需求太宽泛时先问清楚再动手（流式反问 + 选项）
+            text, options = self._check_vague_request(user_message, matched_wg)
+            if text:
+                async for chunk in self._stream_text(text, chunk_size=3, delay=0.02):
+                    yield chunk
+                # 发送选项事件（前端渲染为可点击按钮）
+                if options:
+                    yield ("__OPTIONS__" + json.dumps(options, ensure_ascii=False) + "__/OPTIONS__")
                 return
 
             # Plan-First: 开发类工作组 → 先展示计划，确认后再执行
@@ -365,29 +369,46 @@ class MasterRole(RoleBase):
     # 意图分析
     # ------------------------------------------------------------------ #
 
-    def _check_vague_request(self, message: str, matched_wg: dict) -> str:
+    def _check_vague_request(self, message: str, matched_wg: dict) -> tuple[str, list[dict]]:
         """
-        模糊度守卫：开发类需求太宽泛时，先反问用户确认，不直接派发。
-        返回反问文本，或空字符串（表示需求足够清晰，可以派发）。
+        模糊度守卫：开发类需求太宽泛时，先反问用户确认。
+        返回 (反问文本, 选项列表)，文本为空表示需求足够清晰。
         """
         wg_id = matched_wg.get("id", "")
-        # 只拦截开发类工作组
         dev_wgs = {"dev_full", "dev_code_review", "dev_design_only", "dev_modification", "dev_tech_debt"}
         if wg_id not in dev_wgs:
-            return ""
+            return ("", [])
 
         msg = message.strip()
-        # 太短 → 一定模糊
+        # 太短 → 反问用途/风格/功能
         if len(msg) <= 10:
             return (
-                f"好的，你想「{msg}」——不过在开始之前，我需要了解几个关键点：\n\n"
-                f"1. **用途**：这个页面/应用是做什么的？展示作品集、个人博客、还是在线商店？\n"
-                f"2. **风格**：喜欢简洁风还是花哨一点的？有没有参考的网站？\n"
-                f"3. **功能**：需要什么具体功能？（比如表单、图片展示、暗色模式）\n\n"
-                f"简单说两句就行，我就能帮你规划了 👇"
+                f"好的，你想「{msg}」——不过在开始之前，我需要了解几个关键点：\n\n",
+                [
+                    {"id": "purpose", "label": "用途：作品集/博客/商店/工具？", "multi": False,
+                     "options": [
+                         {"label": "📁 作品集", "value": "做一个作品集展示页"},
+                         {"label": "📝 个人博客", "value": "做一个个人博客"},
+                         {"label": "🛒 在线商店", "value": "做一个在线商店"},
+                         {"label": "🔧 在线工具", "value": "做一个在线工具/计算器"},
+                     ]},
+                    {"id": "style", "label": "风格：简约/花哨/暗色？", "multi": False,
+                     "options": [
+                         {"label": "⚪ 极简白底", "value": "极简白底黑字风格"},
+                         {"label": "⚫ 暗色系", "value": "暗色系风格"},
+                         {"label": "🎨 彩色活泼", "value": "带色彩和动效的活泼风格"},
+                     ]},
+                    {"id": "features", "label": "功能：需要哪些？", "multi": True,
+                     "options": [
+                         {"label": "📞 联系表单", "value": "联系表单"},
+                         {"label": "🖼️ 图片画廊", "value": "图片画廊"},
+                         {"label": "📱 响应式", "value": "响应式适配手机"},
+                         {"label": "🌙 暗色切换", "value": "明暗切换"},
+                     ]},
+                ]
             )
 
-        # 只有"写/做/开发 + 网页/网站/app/应用" 但没有具体需求描述
+        # "写/做/开发 + 网页/网站/app" 但无具体需求
         vague_patterns = [
             r'^(写|做|开发|帮我|给我)\s*(一个?|个)\s*(网页|网站|页面|app|应用|程序)\s*[。！!！?？]*$',
             r'^(写|做|开发)\s*(个人|公司|企业)\s*(网页|网站|页面)\s*[。！!！?？]*$',
@@ -396,15 +417,31 @@ class MasterRole(RoleBase):
         for pat in vague_patterns:
             if re.match(pat, msg):
                 return (
-                    f"收到，你想做一个「{msg}」——在动手之前，先聊两句：\n\n"
-                    f"1. **做什么用的**？展示作品？写博客？还是卖东西？\n"
-                    f"2. **大概要几个页面**？比如首页、关于我、项目展示……\n"
-                    f"3. **风格偏好**？简约白底黑字，还是带色彩和动画的？\n\n"
-                    f"你随便说几句，剩下的我来规划 ✋"
+                    f"收到，你想做一个「{msg}」——在动手之前，先聊两句：\n\n",
+                    [
+                        {"id": "purpose", "label": "做什么用的？", "multi": False,
+                         "options": [
+                             {"label": "📁 作品集", "value": f"做一个作品集展示用的{msg}"},
+                             {"label": "📝 个人博客", "value": f"做一个个人博客{msg}"},
+                             {"label": "🛒 卖东西", "value": f"做一个卖东西的{msg}"},
+                             {"label": "🔧 在线工具", "value": f"做一个在线工具{msg}"},
+                         ]},
+                        {"id": "pages", "label": "几个页面？", "multi": False,
+                         "options": [
+                             {"label": "1️⃣ 单页", "value": "单页就够"},
+                             {"label": "3️⃣ 3-5 页", "value": "3-5 个页面"},
+                             {"label": "📚 详细多页", "value": "首页+关于+联系+项目页等多个"},
+                         ]},
+                        {"id": "style", "label": "风格偏好？", "multi": False,
+                         "options": [
+                             {"label": "⚪ 简约白底", "value": "简约白底黑字风格"},
+                             {"label": "⚫ 暗色专业", "value": "暗色系专业风格"},
+                             {"label": "🎨 彩色活泼", "value": "彩色活泼有动画的风格"},
+                         ]},
+                    ]
                 )
 
-        # 有具体名词（"计算器""待办事项""博客"）→ 通过，不拦截
-        return ""
+        return ("", [])
 
     def _is_confirmation(self, message: str) -> bool:
         """判断用户是否在确认执行计划"""
@@ -492,6 +529,20 @@ class MasterRole(RoleBase):
         reply = f"你好！我是 MyAgent 助手，有什么可以帮你的？"
         self._record_task(message, reply, generate_id("task"))
         return reply
+
+    async def _stream_greeting(self, message: str):
+        """流式问候（逐字 yield）"""
+        reply = f"你好！我是 MyAgent 助手，有什么可以帮你的？"
+        async for chunk in self._stream_text(reply, chunk_size=3, delay=0.02):
+            yield chunk
+        self._record_task(message, reply, generate_id("task"))
+
+    async def _stream_text(self, text: str, chunk_size: int = 3, delay: float = 0.015):
+        """将文本切成小段逐块 yield，模拟真实流式输出"""
+        import asyncio
+        for i in range(0, len(text), chunk_size):
+            yield text[i:i + chunk_size]
+            await asyncio.sleep(delay)
 
     async def _handle_general(self, message: str) -> str:
         """处理通用对话 (未匹配到角色，主控自己 LLM 处理)"""

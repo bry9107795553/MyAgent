@@ -166,6 +166,20 @@ function smartMd(t) {
     const short = think.slice(0, 120).replace(/\n/g, ' ') + '...'
     return `<details class="think-chain"><summary>思考过程 · ${short}</summary><div class="think-content">${marked(think)}</div></details>`
   })
+  // 选项按钮解析：__OPTIONS__[{...},{...}]__/OPTIONS__
+  t = t.replace(/__OPTIONS__([\s\S]*?)__\/OPTIONS__/g, (_, json) => {
+    try {
+      const opts = JSON.parse(json)
+      const btns = opts.map(g => {
+        const lbl = `<div class="opt-group-label">${g.label}</div>`
+        const items = g.options.map((o, i) =>
+          `<button class="opt-btn" data-opt="${encodeURIComponent(o.value)}">${o.label}</button>`
+        ).join('')
+        return `<div class="opt-group">${lbl}<div class="opt-row">${items}</div></div>`
+      }).join('')
+      return `<div class="opt-container">${btns}</div>`
+    } catch { return '' }
+  })
   // 检测是否以 HTML 代码为主（占内容的 60% 以上是 HTML）
   const htmlRatio = (t.match(/<\/?[a-z][\s\S]*?>/gi) || []).length / Math.max(t.length, 1)
   if (htmlRatio > 0.3 && t.length > 200) {
@@ -206,6 +220,18 @@ function initCodeFolding() {
           btn.remove()
         }
         pre.appendChild(btn)
+      }
+    })
+    // 选项按钮：点击后把内容塞进输入框并发送
+    msgEl.querySelectorAll('.opt-btn:not(.bound)').forEach(btn => {
+      btn.classList.add('bound')
+      btn.onclick = () => {
+        const v = decodeURIComponent(btn.dataset.opt || '')
+        if (v && !streaming.value) {
+          btn.parentElement.querySelectorAll('.opt-btn').forEach(b => b.classList.add('clicked'))
+          btn.classList.add('clicked')
+          sendQuick(v)
+        }
       }
     })
   })
@@ -531,6 +557,21 @@ onMounted(() => {
 .think-chain[open] summary::before { content: '↑ 收起'; }
 .think-chain summary:hover { background: rgba(91,93,240,0.06); }
 .think-content { padding: 10px 14px; font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
+
+/* 选项按钮组 */
+.opt-container { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.opt-group-label { font-size: 12px; color: var(--text-tertiary); margin-bottom: 6px; font-weight: 600; }
+.opt-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.opt-btn {
+  padding: 7px 12px; font-size: 12px; font-weight: 500;
+  background: var(--bg-surface); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 8px;
+  cursor: pointer; transition: all 0.15s;
+}
+.opt-btn:hover {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+  transform: translateY(-1px);
+}
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 3px; }
