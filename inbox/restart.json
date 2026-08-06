@@ -1,7 +1,7 @@
 {
   "project": "MyAgent — AMD AI DevMaster Hackathon Track 2",
   "date": "2026-08-06",
-  "time": "14:55",
+  "time": "18:04",
   "deadline": "2026-08-06 23:59",
   "mode": "coach",
   "user_level": "小白",
@@ -10,38 +10,44 @@
     "host": "u-3004-abffcef6",
     "path": "/workspace/template-repos/template-2603/repo",
     "public_url": "https://rc-53833487fc7b93ab.radeon.firstdg.ai",
-    "status": "不可达 — 公网URL返回404，需在云端控制台重新启动"
+    "status": "running — 云端代码已是最新，流水线基本可跑"
   },
 
   "completed": {
-    "B3记忆修复": "master.py dispatch_stream/_handle_general/_handle_greeting 全部添加 _record_task 调用，代码已推送到 GitHub",
-    "部署脚本": "deploy_and_test.sh 已创建 — 云端粘贴即可一键部署+验证B1/B2/B3+跑S7测速"
+    "本日改动": "30 commits, ~22 文件, 3000+ 行代码",
+    "调度系统": "三级分流(Level1自己/Level2一人/Level3组团) + Plan-First + 模糊度守卫",
+    "角色体系": "9个干活角色加角色边界+工具声明+交还前台机制；coach重写；designer微调",
+    "前端": "流式折叠<details>+ 文件Tab+ 侧栏展开按钮+ 选项按钮+ 自动聚焦+ HTML占位符",
+    "后端": "产物自动落盘+ 路径提取+ 工具调用500降级",
+    "配置": "workgroup trigger收窄 + developer路径指定 + translation收窄 + start.sh加构建",
+    "交接文档": "HANDOFF.md — 30commit总览+已知问题+演示流程+操作速查"
   },
 
   "current_bugs": {
-    "B1流水线进度": "已修，待验证",
-    "B2HTML预览": "已严格化extractHtml，待验证",
-    "B3多轮记忆丢失": "已修 — dispatch_stream/通用对话路径遗漏 _record_task，已补全",
-    "B4知识检索失败": "未修 — 低优先级，演示可跳过"
+    "B1流水线进度": "已修，可跑但有几率卡（LLM慢）",
+    "B2HTML预览": "已修，HTML生成时对话区占位符+右侧预览",
+    "B3多轮记忆": "已修，dispatch_stream三路径全加_record_task",
+    "P_developer路径": "developer文件有时未写到frontend/src/components/",
+    "P_LLM慢": "14B模型每个角色20-40s，7步流水线3-5分钟",
+    "P_工具JSON500": "llama.cpp偶尔JSON解析失败，已加降级"
   },
 
   "pending": {
-    "P0_云端部署": "登录 AMD 云端控制台 → SSH 进实例 → bash deploy_and_test.sh",
-    "P0_验证B1": "观察流水线面板逐角色亮起 + __PIPE__ 标记数",
-    "P0_验证B2": "检查预览 Tab 是否有 HTML 页面",
-    "P0_验证B3": "先问'我叫张三'再问'我叫什么'确认记忆保留",
-    "P0_S7测速": "deploy_and_test.sh 自动跑 A/B 组各2次",
     "P0_演示视频": "按 docs/演示解说词.md 录制7镜头",
-    "P0_提交": "粘贴项目说明文档+仓库链接+视频+PPT"
+    "P0_S7测速": "云端 source bench_helpers.sh → benchmark_orig → benchmark_slim → 回填数据",
+    "P0_提交": "粘贴项目说明+仓库链接+视频+PPT",
+    "P1_developer路径": "确保 developer 写到 frontend/src/components/",
+    "P1_面板刷新": "右侧流水线面板首次可能不更新"
   },
 
   "decisions": [
-    "14B模型够用，不换30B",
-    "start.sh已自动装rc-tunnel",
-    "CTX_SIZE=16384（多角色prompt需要）",
-    "extractHtml只接HTML代码块，不接markdown",
-    "B3根因: dispatch_stream 绕过 execute_stream 直接调 _call_llm_stream，遗漏 _record_task"
+    "Plan-First: 模糊需求展示计划, 明确需求(≥15字)直接执行",
+    "三级分流: Level1自己干 > Level2派一人 > Level3组团",
+    "Coach在流水线中直接产出不禁言确认",
+    "干活角色加[交还前台]边界，不懂的事不自己回答",
+    "工具调用500时自动降级纯文本",
+    "前端v-html让details在流式传输中即折叠"
   ],
 
-  "nextAction": "SSH登录云端实例 → cd /workspace/template-repos/template-2603/repo → bash deploy_and_test.sh → 验证结果 → 录视频 → 提交"
+  "nextAction": "云端git pull+bash start.sh → 测试流水线 → 录视频 → S7测速回填数据 → 提交"
 }
