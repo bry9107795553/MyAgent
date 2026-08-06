@@ -390,9 +390,17 @@ class RoleBase(ABC):
                     base_url=base_url,
                 )
             except Exception as e:
-                # LLM 调用本身异常：交还上一轮文本，不让工具循环吃掉错误
-                print(f"[Role:{self.id}] ⚠ 工具循环内 LLM 调用异常: {e}")
-                return last_content
+                # LLM 工具调用异常（常见于 llama.cpp JSON 解析失败 500）
+                print(f"[Role:{self.id}] ⚠ 工具循环异常: {e} → 降级为纯文本调用")
+                try:
+                    result = await gateway.chat(
+                        messages, temperature=0.7, max_tokens=4096,
+                        base_url=base_url,  # 不带 tools 参数
+                    )
+                    return result.get("content") or ""
+                except Exception as e2:
+                    print(f"[Role:{self.id}] 💀 纯文本降级也失败: {e2}")
+                    return last_content
 
             content = result.get("content") or ""
             # 30B MoE 思考模式：若 content 为空，回退到 reasoning
