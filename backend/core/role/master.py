@@ -299,6 +299,12 @@ class MasterRole(RoleBase):
             self._pending_plan = {}
 
         # 尝试匹配预设工作组
+        # 澄清/缩小需求 → 跳过工作组匹配
+        import re
+        is_clarification = bool(re.search(r'^(我?只想|我就|仅仅|不过是)\S', user_message.strip()))
+        matched_wg = None if is_clarification else self._match_workgroup(user_message)
+
+        # 尝试匹配预设工作组
         matched_wg = self._match_workgroup(user_message)
         if matched_wg:
             wg_id = matched_wg.get("id", "")
