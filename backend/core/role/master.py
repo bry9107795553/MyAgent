@@ -904,8 +904,10 @@ class MasterRole(RoleBase):
         # 动态规则: cleanup_hook — 开发类任务结束后自动追加 cleaner
         pipeline = self._apply_cleanup_hook(pipeline, wg_id)
 
-        # 动态规则: experience_eval_hook — 开发类任务收尾后追加经验评估员（方案 C-4，按工作组 members 开关）
-        pipeline = self._apply_experience_eval_hook(workgroup, wg_id)
+        # 动态规则: 简单任务只留核心 4 人 (coach/designer/dev/inspector)
+        pipeline = self._apply_slim_for_simple(user_message, pipeline, wg_id)
+
+        # 动态规则: experience_eval_hook
 
         # 按 step 编号排序
         sorted_pipeline = sorted(pipeline, key=lambda s: s.get("step", 0))
@@ -1139,6 +1141,19 @@ class MasterRole(RoleBase):
 
         print(f"[Master] 动态规则 cleanup_hook: 已追加 cleaner 步骤")
         return pipeline + [cleaner_step]
+
+    def _apply_slim_for_simple(self, user_message: str, pipeline: list[dict], wg_id: str) -> list[dict]:
+        """简单项目（单页面/计算器/demo）只跑核心 4 人，跳过 deployer/cleaner/tester"""
+        if not wg_id.startswith("dev_"): return pipeline
+        msg = user_message.lower()
+        is_simple = any(k in msg for k in ["计算器", "demo", "演示", "简单", "calculator", "单页"])
+        if not is_simple: return pipeline
+        skipped = {"deployer", "cleaner", "tester"}
+        slim = [s for s in pipeline if s.get("role") not in skipped]
+        if slim != pipeline:
+            skipped_names = [self._role_pool.get(r, {}).get("name", r) for r in skipped]
+            print(f"[Master] 简单项目仅需 {len(slim)} 人: 跳过 {skipped_names}")
+        return slim
 
     def _apply_experience_eval_hook(self, workgroup: dict, wg_id: str) -> list[dict]:
         """
