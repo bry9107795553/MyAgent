@@ -54,7 +54,7 @@
 
           <div v-if="streaming" class="msg assistant">
             <div class="msg-avatar"><svg viewBox="0 0 24 24" fill="none" width="14" height="14"><rect x="4" y="8" width="16" height="12" rx="3" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="14" r="1.4" fill="currentColor"/><circle cx="15" cy="14" r="1.4" fill="currentColor"/><path d="M12 8V4M9 4h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
-            <div class="msg-content"><div class="msg-text streaming-text" v-html="`${buf}<span class='cursor-blink'>▊</span>`"></div></div>
+            <div class="msg-content"><div class="msg-text streaming-text" v-html="buf"></div><span class="cursor-blink"></span></div>
           </div>
         </div>
       </div>
@@ -497,7 +497,7 @@ onMounted(() => {
 .msg-text pre { background: #1e293b; color: #e2e8f0; border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 8px 0; font-size: 12.5px; line-height: 1.6; }
 .msg-text pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
 .streaming-text { white-space: pre-wrap; }
-.cursor-blink { color: var(--accent); animation: blink 1s steps(2) infinite; }
+.cursor-blink { display: inline-block; width: 8px; height: 1.1em; background: var(--accent); animation: blink 1s steps(2) infinite; vertical-align: text-bottom; border-radius: 1px; }
 @keyframes blink { 50% { opacity: 0; } }
 
 .msg-meta { display: flex; align-items: center; gap: 8px; padding: 0 4px; margin-top: 2px; }
