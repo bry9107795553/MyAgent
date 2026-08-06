@@ -412,9 +412,14 @@ class MasterRole(RoleBase):
 
             response = "".join(full_response)
 
-            # 前台说完直接出按钮——用户点击启动流水线
-            print(f"[Master] Level 3 → 弹出按钮 (response长度={len(response)})")
-            print(f"[Master] Level 3 → 设置 _pending_wg={wg_name}, msg_len={len(user_message)}")
+            # 前台还在提问（结尾是"?"/"？"）→ 不出按钮, 等用户回答
+            if response.strip().endswith("？") or response.strip().endswith("?"):
+                print(f"[Master] Level 3 → 前台在提问, 不出按钮")
+                self._record_task(user_message, response, generate_id("task"))
+                return
+
+            # 前台说完了（结尾不是"?"）→ 出按钮
+            print(f"[Master] Level 3 → 弹出按钮 + 设置 _pending_wg={wg_name}")
             self._pending_wg = {"wg": matched_wg, "msg": user_message, "pipeline": pipeline}
             yield ("[[OPTIONS]]" + json.dumps([{
                 "id": "confirm_start", "label": "开始执行", "multi": False,
