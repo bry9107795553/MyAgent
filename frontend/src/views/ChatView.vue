@@ -54,7 +54,7 @@
 
           <div v-if="streaming" class="msg assistant">
             <div class="msg-avatar"><svg viewBox="0 0 24 24" fill="none" width="14" height="14"><rect x="4" y="8" width="16" height="12" rx="3" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="14" r="1.4" fill="currentColor"/><circle cx="15" cy="14" r="1.4" fill="currentColor"/><path d="M12 8V4M9 4h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
-            <div class="msg-content"><div class="msg-text streaming-text" v-html="buf + '<span class=\"cursor-blink\">▊</span>'"></div></div>
+            <div class="msg-content"><div class="msg-text streaming-text" v-html="`${buf}<span class='cursor-blink'>▊</span>`"></div></div>
           </div>
         </div>
       </div>
