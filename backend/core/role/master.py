@@ -288,18 +288,22 @@ class MasterRole(RoleBase):
             # 流水线进度交错推送: 每步完成推一次，不等全部结束
             pq = asyncio.Queue()
 
-            async def _on_step(step_num, role_id, status, total):
-                await pq.put(f"\n__PIPE__{step_num}/{total} {role_id} {status}")
+            async def _on_step(step_num, role_id, status, total, output):
+                await pq.put((f"\n\n__PIPE__{step_num}/{total} {role_id} {status}", output or ""))
 
             pipe_task = asyncio.ensure_future(
                 self._execute_pipeline(matched_wg, user_message, step_callback=_on_step)
             )
-            # 交错: 进度事件优先 yield，同时等流水线结束
+            # 交错: 进度事件 + 角色输出优先 yield
             buf = ""
             while not pipe_task.done():
                 try:
-                    evt = await asyncio.wait_for(pq.get(), timeout=0.3)
+                    evt, output = await asyncio.wait_for(pq.get(), timeout=0.3)
                     buf += evt
+                    if output and len(output) > 0:
+                        # 把角色输出限长后也丢给对话
+                        preview = output if len(output) < 600 else output[:600] + "\n... (已截断)"
+                        buf += f"\n\n### 步骤 {role_id} 产出\n\n{preview}\n"
                 except asyncio.TimeoutError:
                     if buf:
                         yield buf
@@ -307,7 +311,11 @@ class MasterRole(RoleBase):
                     continue
             # 排空剩余进度
             while not pq.empty():
-                buf += pq.get_nowait()
+                evt, output = pq.get_nowait()
+                buf += evt
+                if output and len(output) > 0:
+                    preview = output if len(output) < 600 else output[:600] + "\n... (已截断)"
+                    buf += f"\n\n### 步骤产出\n\n{preview}\n"
             if buf:
                 yield buf
             yield await pipe_task
@@ -524,7 +532,7 @@ class MasterRole(RoleBase):
 
         :param workgroup: 工作组配置
         :param user_message: 用户原始消息
-        :param step_callback: 可选异步回调，每步完成时调用 async cb(step_num, role_id, status, total)
+        :param step_callback: 可选异步回调，每步完成时调用 async cb(step_num, role_id, status, total, output)
         :return: 汇总后的执行结果
         """
         wg_name = workgroup.get("name", workgroup.get("id"))
@@ -641,7 +649,7 @@ class MasterRole(RoleBase):
                         if step_callback:
                             await step_callback(step_num, rid,
                                                "done" if ok == "✓" else "error",
-                                               len(sorted_pipeline))
+                                               len(sorted_pipeline), res)
                     else:
                         print(f"[Master] 并行执行异常: {pr}")
             else:
@@ -661,7 +669,7 @@ class MasterRole(RoleBase):
                 execution_log.append(f"{ok} 步骤 {step_num}: {rid} 完成")
                 if step_callback:
                     await step_callback(step_num, rid, "done" if ok == "✓" else "error",
-                                       len(sorted_pipeline))
+                                       len(sorted_pipeline), result)
 
             # 检查是否需要返工
             condition = step_def.get("condition", "")
