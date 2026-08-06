@@ -320,6 +320,7 @@ class MasterRole(RoleBase):
                 full_response.append(token)
                 yield token
             self._record_task(user_message, "".join(full_response), task_id)
+            secretary.record_turn(user_message=user_message, role_response="".join(full_response), role_id="master")
             return
 
         elif level == 2:
@@ -342,6 +343,8 @@ class MasterRole(RoleBase):
                     return
                 content = self._aggregate_results(user_message, results)
                 yield content
+                self._record_task(user_message, content, generate_id("task"))
+                secretary.record_turn(user_message=user_message, role_response=content, role_id=detail[0]["id"] if detail else "master")
                 return
             else:
                 # 没有匹配到具体角色 → 降级 Level 1
@@ -389,6 +392,11 @@ class MasterRole(RoleBase):
             # 复杂工作组 → 直接执行
             async for token in self._execute_workgroup_stream(matched_wg, user_message, pipeline):
                 yield token
+            secretary.record_turn(
+                user_message=user_message,
+                role_response="(pipeline)",
+                role_id=matched_wg.get("id", "master"),
+            )
             return
 
     # ── 三级分流 ──
