@@ -463,6 +463,11 @@ class MasterRole(RoleBase):
             r = self._role_pool.get("knowledge_retriever")
             if r: return (2, [r])
 
+        # 日程/规划/提醒 → scheduler
+        if any(k in msg for k in ["规划", "安排", "日程", "提醒", "排期"]):
+            r = self._role_pool.get("scheduler")
+            if r: return (2, [r])
+
         # 分析/对比/评估 → knowledge_retriever
         if any(k in msg for k in ["分析", "对比", "评估", "比较"]):
             r = self._role_pool.get("knowledge_retriever")
