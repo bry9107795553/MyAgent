@@ -7,6 +7,38 @@ A fully local, privacy-first AI agent platform powered by AMD Radeon GPUs and RO
 
 ---
 
+## ⚡ Quick Start (for Judges)
+
+```bash
+# 1. Clone
+git clone https://github.com/bry9107795553/MyAgent.git && cd MyAgent
+
+# 2. Install (auto-downloads llama.cpp + GGUF model)
+bash install.sh
+
+# 3. Configure model path in .env
+cp backend/.env.template backend/.env
+# Edit backend/.env → set LLAMA_MODEL to your GGUF path
+
+# 4. Build frontend
+cd frontend && npm install && npm run build && cd ..
+
+# 5. Start
+bash start.sh
+
+# 6. Open
+# http://localhost  (if nginx) or http://localhost:8080 (direct)
+
+# Verify
+curl http://localhost:8080/api/health
+```
+
+**Requirements**: AMD Radeon GPU + ROCm 7.x + Python 3.10+ + Node 18+
+
+**Model**: Default uses Qwen2.5-14B (8.4GB GGUF). For 30B MoE (default in cloud demo), set `LLAMA_MODEL` to `Qwen3-30B-A3B` path.
+
+---
+
 ## Application Scenarios
 
 MyAgent is designed for users who need a capable AI assistant without sacrificing data privacy:
