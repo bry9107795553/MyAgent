@@ -138,6 +138,16 @@ class MasterRole(RoleBase):
 """
 
     # ------------------------------------------------------------------ #
+    # 上下文精简 (主控是路由器，不是 LLM 对话者)
+    # ------------------------------------------------------------------ #
+
+    def _assemble_context(self, task: str, task_id: str, extra_context: str = ""):
+        """主控只需要 3 轮对话做路由判断，不加载全量历史"""
+        ctx = super()._assemble_context(task, task_id, extra_context)
+        ctx.l0_messages = self._wm.get_recent(n=6)  # 3 轮 = 6 条 (user+assistant)
+        return ctx
+
+    # ------------------------------------------------------------------ #
     # 配置加载
     # ------------------------------------------------------------------ #
 
@@ -289,10 +299,19 @@ class MasterRole(RoleBase):
             pq = asyncio.Queue()
 
             async def _on_step(step_num, role_id, status, total, output):
+                # 提取一行摘要：取产出中第一个非标题、有实际内容的行
+                summary = ""
+                if output:
+                    lines = [l.strip() for l in output.split('\n') if l.strip() and not l.strip().startswith('#')]
+                    if lines:
+                        # 去掉 markdown 标记符，留纯文本
+                        import re
+                        summary = re.sub(r'^[-*>`|]+\s*', '', lines[0])[:120]
                 await pq.put((
                     f"\n\n__PIPE__{step_num}/{total} {role_id} {status}",
                     role_id,
-                    output or ""
+                    summary,
+                    output or "",
                 ))
 
             pipe_task = asyncio.ensure_future(
@@ -301,29 +320,30 @@ class MasterRole(RoleBase):
             buf = ""
             while not pipe_task.done():
                 try:
-                    evt, rid, output = await asyncio.wait_for(pq.get(), timeout=0.3)
+                    evt, rid, summary, output = await asyncio.wait_for(pq.get(), timeout=0.3)
                     buf += evt
-                    if output and len(output) > 0:
-                        # 短输出直接显示，长代码用 <details> 折叠（前端 marked 原生支持）
-                        if len(output) > 800:
-                            preview = f"<details><summary>📄 {rid} 完整产出 ({len(output)} 字符) — 点击展开</summary>\n\n{output}\n\n</details>"
-                        else:
-                            preview = output
-                        buf += f"\n\n**{rid}:**\n{preview}\n"
+                    status_icon = "✅" if "done" in evt else "❌"
+                    if summary:
+                        buf += f"\n\n{status_icon} **{rid}** — {summary}\n"
+                    if output and len(output) > 200:
+                        buf += f"<details><summary>📄 查看完整产出</summary>\n\n{output}\n\n</details>\n"
+                    elif output:
+                        buf += f"\n{output}\n"
                 except asyncio.TimeoutError:
                     if buf:
                         yield buf
                         buf = ""
                     continue
             while not pq.empty():
-                evt, rid, output = pq.get_nowait()
+                evt, rid, summary, output = pq.get_nowait()
                 buf += evt
-                if output and len(output) > 0:
-                    if len(output) > 800:
-                        preview = f"<details><summary>📄 {rid} 完整产出 ({len(output)} 字符) — 点击展开</summary>\n\n{output}\n\n</details>"
-                    else:
-                        preview = output
-                    buf += f"\n\n**{rid}:**\n{preview}\n"
+                status_icon = "✅" if "done" in evt else "❌"
+                if summary:
+                    buf += f"\n\n{status_icon} **{rid}** — {summary}\n"
+                if output and len(output) > 200:
+                    buf += f"<details><summary>📄 查看完整产出</summary>\n\n{output}\n\n</details>\n"
+                elif output:
+                    buf += f"\n{output}\n"
             if buf:
                 yield buf
             # 等待任务完成取最终汇总（不输出完整 blob 到对话，避免重复）
