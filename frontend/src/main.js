@@ -11,6 +11,9 @@ import BrowserView from './views/BrowserView.vue'
 
 const routes = [
   { path: '/', name: 'chat', component: ChatView },
+  { path: '/history', redirect: '/' },
+  { path: '/workgroups', redirect: '/' },
+  { path: '/plugins', redirect: '/' },
   { path: '/browse', name: 'browse', component: BrowserView },
   { path: '/workbench', name: 'workbench', component: WorkbenchView },
   { path: '/skins', name: 'skins', component: SkinMarketView },

@@ -53,7 +53,7 @@ The Master role acts as a **firewall and dispatcher** — all requests go throug
 
 18 roles are declared in `data/role_pool.json` and dispatched by Master; the Secretary is an always-on background role implemented in `backend/core/agent/orchestrator.py` (it observes every turn rather than being dispatched). 18 + 1 = 19.
 
-The **GPU column is the affinity tag** (`gpu_affinity` in `role_pool.json`) used for optional multi-GPU scale-out. In the default single-GPU deployment all roles run on the one physical GPU — see [Single-GPU Deployment](#2-single-gpu-deployment-default--as-demonstrated). The **Model column reflects the multi-GPU plan** in `role_pool.json → gpu_allocation`; it is metadata only. On a single card every role is served by the one loaded model (`gateway._get_model_name()` always returns `settings.llama_model`).
+The **GPU column is the affinity tag** (`gpu_affinity` in `role_pool.json`) used for optional multi-GPU scale-out. In the default single-GPU deployment all roles run on the one physical GPU — see [Single-GPU Deployment](#2-single-gpu-deployment-default--as-demonstrated). The **Model column reflects the multi-GPU plan** in `role_pool.json → gpu_allocation`; it is metadata only. On a single card every role is served by the one loaded model (`gateway._get_model_name()` always returns `settings.llama_model`) — in the demonstrated deployment this is **Qwen3-30B-A3B MoE**.
 
 | Group (`category`) | Role (`id`) | GPU Affinity | Model (multi-GPU plan) | Capability |
 |-------|------|--------------|-------------|------------|
@@ -133,9 +133,9 @@ Five tools are registered at import time in `backend/core/tools/builtin/__init__
 | `file_write` | `file_tools.py::FileWriteTool` | Writes/appends a real file; refuses paths outside the project root | off |
 | `file_list` | `file_tools.py::FileListTool` | Lists a real directory with glob filtering | on — shares the `file_read` switch (`config_key = "file_read"`) |
 | `code_exec` | `code_tools.py::CodeExecTool` | Runs Python in a subprocess; default timeout 10 s, max 30 s, output capped at 10 000 chars | off |
-| `web_search` | `search_tools.py::WebSearchTool` | **Disabled placeholder** — `execute()` always returns `未启用` and makes no network request. Kept so the registry's capability surface stays visible. | off |
+| `web_search` | `search_tools.py::WebSearchTool` | **Real local retrieval** — queries the L3 knowledge graph (`core/memory/knowledge_base`) plus L1/L2 session memory and returns ranked entity-relation triples. No network egress; the project stays fully offline. Enable per-agent via `AgentTools.web_search`. | off (default) |
 
-Per-agent switches live in `backend/core/agent/agent_schemas.py::AgentTools`. File tools genuinely touch disk, so their output is verifiable and auditable; `web_search` does not, and the project ships fully offline.
+Per-agent switches live in `backend/core/agent/agent_schemas.py::AgentTools`. File tools genuinely touch disk, so their output is verifiable and auditable. `web_search` now performs real local knowledge retrieval (no network), closing the earlier placeholder gap while keeping the project fully offline.
 
 ### 5. Project State Tracking
 Cross-session project awareness via `PROJECT_STATUS.md` (`backend/core/project/project_status.py`). The Coach role maintains structured progress tracking, and the system auto-restores context after restart.
@@ -191,7 +191,7 @@ Matrix operations (attention, FFN, embedding) are executed on the AMD GPU throug
 
 **Fitting 19 roles onto one 48GB card** is what makes this work:
 
-- **Q4_K_M quantization**: the GGUF weight file measures ≈ 8.99 GiB (q5_k_m ≈ 10.5 GiB, q8_0 ≈ 15.7 GiB)
+- **Q4_K_M quantization**: weights stay small — Qwen2.5-14B ≈ 8.99 GiB, **Qwen3-30B-A3B MoE ≈ 18 GiB** (q5_k_m ≈ 10.5 GiB, q8_0 ≈ 15.7 GiB for the 14B build)
 - **GQA-aware KV budgeting**: Qwen2.5-14B has 48 layers, 8 KV heads, head_dim 128 → `2 × 48 × 8 × 128 × 2 B = 196 608 B = 0.1875 MiB per token`
 - **Sequential role execution**: roles share the GPU in turn rather than competing for VRAM, so peak usage is bounded by a single active context
 - **Full offload** (`-ngl 99`): every layer lives on the Radeon GPU; no CPU fallback path
@@ -204,6 +204,7 @@ VRAM budget (weights + KV + ~1.5 GiB compute buffer), as documented in `setup_am
 | q4_k_m total (GiB) | ~12.0 | ~13.5 | ~16.5 | ~22.5 |
 | q5_k_m total (GiB) | ~13.5 | ~15.0 | ~18.0 | ~24.0 |
 
+The demonstrated deployment runs **Qwen3-30B-A3B MoE (Q4_K_M, ≈ 18 GiB)** on the W7900. MoE activates only ~3B params per token, so decode stays fast; with its 4 KV heads the KV cache is tiny, and weights + 8K context fit within ~19 GiB — leaving ample headroom on 48 GB. The 14B figures above are the lighter default-install baseline.
 `CTX_SIZE=8192` is a conservative starting baseline, not a VRAM ceiling. Note that `llama-server` splits the context across `--parallel` slots, so `PARALLEL=1` keeps the full context available to a single session.
 
 ### 3. Multi-GPU Affinity (Optional Scale-Out)
@@ -251,13 +252,14 @@ When llama.cpp is unavailable, the gateway reports `mode = "none"` and inference
 
 | Model | Size | Quantization | Loaded in default (single-GPU) deploy | Purpose |
 |-------|------|-------------|:---:|---------|
-| Qwen2.5-14B-Instruct | 14B | GGUF Q4_K_M | **Yes** — serves all 19 roles | Primary reasoning, code generation |
+| **Qwen3-30B-A3B-Instruct** | 30B (≈3B active, MoE) | GGUF Q4_K_M | **Yes — demonstrated deployment** (activate with `bash switch_model.sh 30b`) | Primary reasoning, code generation — used for the demo video |
+| Qwen2.5-14B-Instruct | 14B | GGUF Q4_K_M | Default install (lighter) — serves all 19 roles | Primary reasoning, code generation |
 | Qwen2.5-7B-Instruct | 7B | GGUF Q4_K_M | No — multi-GPU only (`gpu1`/`gpu2`) | Secondary reasoning, lightweight tasks |
 | Qwen2.5-VL-7B-Instruct | 7B | GGUF | No — multi-GPU only (`gpu1`) | Multimodal vision analysis |
 
-The GGUF file is fetched by `setup_amd_cloud.sh` / `install.sh` into `$HOME/llama.cpp/models/`, trying ModelScope → hf-mirror → Hugging Face in order, and validating the `GGUF` magic bytes after download.
+The GGUF file is fetched by `setup_amd_cloud.sh` / `install.sh` into `$HOME/llama.cpp/models/`, trying ModelScope → hf-mirror → Hugging Face in order, and validating the `GGUF` magic bytes after download. `setup_amd_cloud.sh` installs **Qwen2.5-14B** by default; the demonstrated **Qwen3-30B-A3B MoE** is selected with `bash switch_model.sh 30b` (updates `backend/.env`).
 
-On the reference W7900 deployment a single Qwen2.5-14B-Instruct Q4_K_M instance backs the entire role system. The 7B and VL entries are part of the multi-GPU scale-out plan and are not loaded in the demonstrated configuration.
+On the reference W7900 deployment a single **Qwen3-30B-A3B MoE (Q4_K_M)** instance backs the entire role system for the demo. The 7B and VL entries are part of the multi-GPU scale-out plan and are not loaded in the demonstrated configuration.
 
 ### Why llama.cpp + ROCm?
 
@@ -424,7 +426,18 @@ tail -f /tmp/backend.log  # FastAPI logs
 
 ## Demo Video
 
-[Link to demo video — 3-5 minutes, demonstrating full workflow on AMD Radeon GPU]
+Recorded on the reference **Radeon PRO W7900 (48GB, ROCm 7.2)** running **Qwen3-30B-A3B MoE**, 3–5 minutes, showing the full workflow on AMD Radeon GPU. Scenario script: [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md).
+
+> _[Video link to be inserted before submission.]_
+
+## Competition Submission
+
+Per the Track 2 rules, all submission materials are in English:
+
+- **Project documentation & README** — this file (scenarios, agent architecture, core capabilities, model & local deployment, GPU inference optimization).
+- **Source code** — the full repository.
+- **Demo video** — 3–5 min on Radeon PRO W7900; see [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md).
+- **PR** — Fork `AMD-DEV-CONTEST/Radeon-hackathon-2026-07` and open a PR titled `Track 2, <name>, MyAgent`; see [`PR_SUBMISSION.md`](PR_SUBMISSION.md).
 
 ---
 
