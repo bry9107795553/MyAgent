@@ -308,6 +308,7 @@ class MasterRole(RoleBase):
 
         # 前台确认入口：用户说"确认/开始/好的" → 启动待确认工作组
         if hasattr(self, '_pending_wg') and self._pending_wg and self._is_confirmation(user_message):
+            print(f"[Master] _pending_wg 触发: wg={self._pending_wg['wg'].get('name')}")
             pending = self._pending_wg
             self._pending_wg = None
             yield "好的，开始执行 👇\n"
@@ -411,6 +412,7 @@ class MasterRole(RoleBase):
 
             # 前台问了"确认"类的词 → 暂存上下文，等用户点头
             if any(kw in response for kw in ["确认", "确认后", "需要您确认"]):
+                print(f"[Master] 保存 _pending_wg: wg={wg_name}")
                 self._pending_wg = {"wg": matched_wg, "msg": user_message, "pipeline": pipeline}
                 self._record_task(user_message, response, generate_id("task"))
                 return
