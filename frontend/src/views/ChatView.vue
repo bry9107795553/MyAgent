@@ -1,5 +1,5 @@
 <template>
-  <div class="main">
+  <div class="main" style="position: relative;">
     <!-- 左栏：对话历史 -->
     <button class="sidebar-expand" v-if="sidebarCollapsed" @click="sidebarCollapsed = false">≡ 对话</button>
 <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }" ref="sidebarEl">
@@ -79,7 +79,7 @@
     </div>
 
     <!-- 右栏 -->
-    <button class="sidebar-expand" v-if="inspectorCollapsed" @click="inspectorCollapsed = false">面板 ≡</button>
+    <button class="sidebar-expand right" v-if="inspectorCollapsed" @click="inspectorCollapsed = false">面板 ≡</button>
 <aside class="inspector" :class="{ collapsed: inspectorCollapsed }" ref="inspectorEl">
       <div class="inspector-tabs">
         <button class="inspector-tab" :class="{ active: rightTab === 'pipeline' }" @click="rightTab = 'pipeline'">流水线</button>
@@ -523,7 +523,8 @@ onMounted(() => {
 /* ===== 右栏 ===== */
 .inspector { width: 340px; flex-shrink: 0; background: var(--bg-surface); display: flex; flex-direction: column; overflow: hidden; transition: margin-right 0.25s ease; position: relative; z-index: 1; }
 .inspector.collapsed { margin-right: -340px; box-shadow: -2px 0 8px rgba(0,0,0,0.06); }
-.sidebar-expand[style*="right"], button.sidebar-expand:last-of-type { right: 0; border-radius: 6px 0 0 6px; border-right: 1px solid var(--border); border-left: none; }
+.sidebar-expand[style*="right"] { right: 0; border-radius: 6px 0 0 6px; border-right: 1px solid var(--border); border-left: none; left: auto; }
+.sidebar-expand.right { right: 0 !important; border-radius: 6px 0 0 6px !important; border-left: 1px solid var(--border) !important; border-right: none !important; left: auto !important; }
 .inspector .panel-tab-hint { left: -22px; border-radius: 7px 0 0 7px; border-right: none; }
 
 .inspector-tabs { display: flex; padding: 12px 16px 0; gap: 2px; border-bottom: 1px solid var(--border-light); flex-shrink: 0; }
